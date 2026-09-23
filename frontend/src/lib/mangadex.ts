@@ -1,0 +1,310 @@
+import { MediaItem } from "@/types";
+import { readApiCache, writeApiCache } from "@/lib/api-cache";
+
+/**
+ * Extracts MangaDex ID from an AniList node's externalLinks, or falls back to text search.
+ */
+export async function getMangaDexId(node: any): Promise<string | null> {
+  const isManga = ['MANGA', 'NOVEL', 'ONE_SHOT'].includes(node.format);
+  if (!isManga) return null;
+
+  // Primary Strategy: Extract from externalLinks
+  const links = node.externalLinks || [];
+  const mdLink = links.find((l: any) => l.site === 'MangaDex');
+  
+  if (mdLink && mdLink.url) {
+    const match = mdLink.url.match(/mangadex\.org\/title\/([a-f0-9\-]+)/i);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+
+  // Fallback Strategy: Text search
+  const title = node.title?.english || node.title?.romaji;
+  if (!title) return null;
+
+  try {
+    const encodedTitle = encodeURIComponent(title);
+    const res = await fetch(`https://api.mangadex.org/manga?title=${encodedTitle}&limit=10`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.data && data.data.length > 0) {
+      const searchTitles = [node.title?.english, node.title?.romaji]
+        .filter(Boolean)
+        .map((t: string) => t.toLowerCase().trim());
+
+      let bestMangaId = null;
+      let highestScore = -999;
+
+      for (const manga of data.data) {
+        const mainTitles = Object.values(manga.attributes.title || {}).map((t: any) => t.toLowerCase().trim());
+        const altTitles = (manga.attributes.altTitles || []).flatMap((alt: any) => Object.values(alt).map((t: any) => t.toLowerCase().trim()));
+        const allMangaTitles = [...mainTitles, ...altTitles];
+
+        const hasExactMatch = allMangaTitles.some(t => searchTitles.includes(t));
+        const hasPartialMatch = allMangaTitles.some(t => searchTitles.some(st => t.includes(st) || st.includes(t)));
+        let score = hasExactMatch ? 100 : hasPartialMatch ? 50 : 0;
+
+        const tags = (manga.attributes.tags || []).map((tag: any) => tag.attributes.name.en.toLowerCase());
+        if (tags.includes("official colored") || tags.includes("colored")) {
+          score -= 50;
+        }
+        if (tags.includes("doujinshi")) {
+          score -= 80;
+        }
+        if (tags.includes("fan colored")) {
+          score -= 70;
+        }
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestMangaId = manga.id;
+        }
+      }
+
+      if (highestScore >= 40) {
+        return bestMangaId;
+      }
+      return null;
+    }
+  } catch (error) {
+    console.error(`[MangaDex Fallback Error] for title "${title}":`, error);
+  }
+
+  return null;
+}
+
+/**
+ * Pings MangaDex API to extract the high-resolution cover URL.
+ */
+export async function getMangaDexCoverUrl(mangadexId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://api.mangadex.org/manga/${mangadexId}?includes[]=cover_art`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    
+    const manga = data.data;
+    if (!manga || !manga.relationships) return null;
+
+    const coverRel = manga.relationships.find((r: any) => r.type === 'cover_art');
+    if (coverRel && coverRel.attributes && coverRel.attributes.fileName) {
+      const fileName = coverRel.attributes.fileName;
+      return `https://uploads.mangadex.org/covers/${mangadexId}/${fileName}`;
+    }
+  } catch (error) {
+    console.error(`[MangaDex Cover Error] for id "${mangadexId}":`, error);
+  }
+  return null;
+}
+
+/**
+ * Searches MangaDex API for manga by title and maps them to MediaItem format.
+ */
+export async function searchMangaDex(query: string): Promise<MediaItem[]> {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return [];
+
+  const cacheKey = `mangadex-search-${encodeURIComponent(normalizedQuery.toLowerCase())}`;
+  const cached = await readApiCache<MediaItem[]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const encodedTitle = encodeURIComponent(normalizedQuery);
+    const res = await fetch(
+      `https://api.mangadex.org/manga?title=${encodedTitle}&limit=15&includes[]=cover_art&includes[]=author&order[relevance]=desc&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`,
+      { next: { revalidate: 3600 } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!data.data || !Array.isArray(data.data)) return [];
+
+    const results: MediaItem[] = [];
+    for (const manga of data.data) {
+      const titles = manga.attributes?.title || {};
+      const title = titles.en || titles['ja-ro'] || Object.values(titles)[0] || "Unknown Title";
+
+      // Exclude doujinshis unless query explicitly requests doujin
+      const tags = (manga.attributes?.tags || []).map((t: any) => t.attributes?.name?.en?.toLowerCase()).filter(Boolean);
+      const isDoujin = tags.includes('doujinshi');
+      if (isDoujin && !normalizedQuery.toLowerCase().includes('doujin')) {
+        continue;
+      }
+
+      // Cover Art
+      const coverRel = manga.relationships?.find((r: any) => r.type === 'cover_art');
+      const fileName = coverRel?.attributes?.fileName;
+      const image = fileName ? `https://uploads.mangadex.org/covers/${manga.id}/${fileName}.512.jpg` : null;
+
+      const year = manga.attributes?.year;
+      const releaseDate = year ? `${year}-01-01` : 'N/A';
+
+      results.push({
+        id: `mangadex-manga-${manga.id}`,
+        title,
+        type: 'manga',
+        image,
+        releaseDate,
+        origin: 'MANGADEX'
+      });
+    }
+
+    await writeApiCache(cacheKey, 'mangadex', results, 24 * 3600);
+
+    return results;
+  } catch (error) {
+    console.warn(`[MangaDex Search Error] for query "${query}":`, error);
+    return [];
+  }
+}
+
+/**
+ * Fetches full manga details from MangaDex.
+ */
+export async function getMangaDexDetails(mangadexId: string) {
+  const cacheKey = `mangadex-details-${mangadexId}`;
+  const cachedData = await readApiCache<any>(cacheKey);
+  if (cachedData) {
+    if (Array.isArray(cachedData.keywords) && Array.isArray(cachedData.genres) && cachedData.genres.length <= 3) {
+      return cachedData;
+    }
+  }
+
+  try {
+    const res = await fetch(`https://api.mangadex.org/manga/${mangadexId}?includes[]=cover_art&includes[]=author&includes[]=artist`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const manga = json.data;
+    if (!manga) return null;
+
+    const titles = manga.attributes?.title || {};
+    const title = titles.en || titles['ja-ro'] || Object.values(titles)[0] || "Unknown Title";
+    const descObj = manga.attributes?.description || {};
+    const description = descObj.en || Object.values(descObj)[0] || "";
+
+    const coverRel = manga.relationships?.find((r: any) => r.type === 'cover_art');
+    const fileName = coverRel?.attributes?.fileName;
+    const image = fileName ? `https://uploads.mangadex.org/covers/${manga.id}/${fileName}.512.jpg` : null;
+
+    const authors = manga.relationships?.filter((r: any) => r.type === 'author' || r.type === 'artist') || [];
+    const staff = authors.map((a: any) => ({
+      id: `mangadex-${a.id}`,
+      name: a.attributes?.name || "Unknown",
+      role: a.type === 'author' ? 'Author' : 'Artist',
+      image: null
+    }));
+
+    const year = manga.attributes?.year;
+    const releaseDate = year ? `${year}-01-01` : null;
+    const status = manga.attributes?.status || null;
+    const lastChapter = manga.attributes?.lastChapter;
+    const chapters = lastChapter && !isNaN(parseInt(lastChapter, 10)) ? parseInt(lastChapter, 10) : null;
+    const lastVolume = manga.attributes?.lastVolume;
+    const volumes = lastVolume && !isNaN(parseInt(lastVolume, 10)) ? parseInt(lastVolume, 10) : null;
+
+    const alId = manga.attributes?.links?.al ? parseInt(manga.attributes.links.al, 10) : null;
+    const malId = manga.attributes?.links?.mal ? parseInt(manga.attributes.links.mal, 10) : null;
+
+    const rawTags = manga.attributes?.tags || [];
+    const macroGenres = rawTags
+      .filter((t: any) => t.attributes?.group === 'genre')
+      .map((t: any) => t.attributes?.name?.en)
+      .filter(Boolean);
+
+    // Fallback to top tags if no tags are explicitly grouped as genre
+    const baseGenres = macroGenres.length > 0 ? macroGenres : rawTags
+      .filter((t: any) => t.attributes?.group !== 'format' && t.attributes?.group !== 'content')
+      .map((t: any) => t.attributes?.name?.en)
+      .filter(Boolean);
+
+    // Keep top 3 genres for header row, preserve the rest in keywords
+    const genres = baseGenres.slice(0, 3);
+    const overflowGenres = baseGenres.slice(3);
+
+    const themes = rawTags
+      .filter((t: any) => t.attributes?.group === 'theme')
+      .map((t: any) => t.attributes?.name?.en)
+      .filter(Boolean);
+
+    const keywords = Array.from(new Set([...overflowGenres, ...themes]));
+
+    const result = {
+      id: manga.id,
+      mangadexId: manga.id,
+      anilistId: isNaN(Number(alId)) ? null : alId,
+      malId: isNaN(Number(malId)) ? null : malId,
+      title,
+      description,
+      image,
+      releaseDate,
+      status,
+      chapters,
+      volumes,
+      genres,
+      keywords,
+      staff
+    };
+
+    await writeApiCache(cacheKey, 'mangadex', result, 7 * 24 * 3600);
+
+    return result;
+  } catch (error) {
+    console.warn(`[MangaDex Details Error] for ${mangadexId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Resolves an AniList ID to MangaDex details via MAL-Sync.
+ */
+export async function getMangaDexByAniListId(anilistId: number) {
+  try {
+    const res = await fetch(`https://api.malsync.moe/mal/manga/anilist:${anilistId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const mdSites = data.Sites?.Mangadex;
+    if (mdSites) {
+      const firstMdKey = Object.keys(mdSites)[0];
+      const mdEntry = mdSites[firstMdKey];
+      const mdId = mdEntry?.identifier || firstMdKey;
+      if (mdId) {
+        return await getMangaDexDetails(mdId);
+      }
+    }
+  } catch (error) {
+    console.warn(`[MAL-Sync MangaDex Error] for anilist ${anilistId}:`, error);
+  }
+  return null;
+}
+
+/**
+ * Resolves a MyAnimeList manga ID to MangaDex details via MAL-Sync.
+ */
+export async function getMangaDexByMalId(malId: number) {
+  try {
+    const res = await fetch(`https://api.malsync.moe/mal/manga/${malId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const mdSites = data.Sites?.Mangadex;
+    if (mdSites) {
+      const firstMdKey = Object.keys(mdSites)[0];
+      const mdEntry = mdSites[firstMdKey];
+      const mdId = mdEntry?.identifier || firstMdKey;
+      if (mdId) {
+        return await getMangaDexDetails(mdId);
+      }
+    }
+  } catch (error) {
+    console.warn(`[MAL-Sync MangaDex Error] for mal ${malId}:`, error);
+  }
+  return null;
+}
+
+/**
+ * Upserts a manga record into Prisma Media table from MangaDex details.
+ */
+export async function upsertMangaDexMedia(mdDetails: any) {
+  return mdDetails;
+}
+

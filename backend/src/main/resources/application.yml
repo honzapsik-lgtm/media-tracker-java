@@ -1,0 +1,56 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: media-tracker-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/media_app}
+    username: ${SPRING_DATASOURCE_USERNAME:admin}
+    password: ${SPRING_DATASOURCE_PASSWORD:localpassword123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      leak-detection-threshold: 2000
+  threads:
+    virtual:
+      enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc:
+          lob:
+            non_contextual_creation: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: ${NEXTAUTH_SECRET:default-fallback-secret-for-development-change-in-production-123456}
+  gateway:
+    secret: ${INTERNAL_GATEWAY_SECRET:default-internal-secret-change-in-prod-123456}
+  providers:
+    tmdb:
+      api-key: ${TMDB_API_KEY:}
+    twitch:
+      client-id: ${TWITCH_CLIENT_ID:}
+      client-secret: ${TWITCH_CLIENT_SECRET:}
+    rawg:
+      api-key: ${RAWG_API_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
