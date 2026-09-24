@@ -41,7 +41,7 @@ public class TmdbClient {
     }
 
     public Optional<MediaItemDto> getDetails(int id, String type) {
-        String cacheKey = "tmdb-" + type + "-" + id;
+        String cacheKey = "tmdb-details-v2-" + type + "-" + id;
         Optional<MediaItemDto> cached = cacheService.get(cacheKey, MediaItemDto.class);
         if (cached.isPresent()) {
             return cached;
@@ -164,6 +164,15 @@ public class TmdbClient {
             }
             dto.setCredits(credits);
 
+            List<Object> studios = new ArrayList<>();
+            for (String field : List.of("production_companies", "networks")) {
+                for (JsonNode studio : data.path(field)) {
+                    studios.add(java.util.Map.of("id", ("networks".equals(field) ? "tmdbnet-" : "tmdb-")
+                            + studio.path("id").asText(), "name", studio.path("name").asText()));
+                }
+            }
+            dto.setStudios(studios);
+
             // Seasons summary for TV
             if (data.has("seasons")) {
                 dto.setSeasons(data.get("seasons"));
@@ -221,6 +230,35 @@ public class TmdbClient {
             log.warn("Failed to fetch TMDb season episodes for tvId={}, season={}: {}", tvId, seasonNumber, e.getMessage());
             return List.of();
         }
+    }
+
+    public java.util.Map<String, List<MediaCreditDto>> getEpisodeCredits(int tvId, int season, int episode) {
+        if (apiKey == null || apiKey.isBlank()) return java.util.Map.of("cast", List.of(), "crew", List.of());
+        String key = "tmdb-episode-credits-" + tvId + "-" + season + "-" + episode;
+        JsonNode data = cacheService.get(key, JsonNode.class).orElseGet(() -> {
+            JsonNode response = restClient.get().uri(String.format(
+                    "%s/tv/%d/season/%d/episode/%d/credits?api_key=%s", BASE_URL, tvId, season, episode, apiKey))
+                    .retrieve().body(JsonNode.class);
+            if (response != null) cacheService.put(key, "tmdb", response, CACHE_TTL_SECONDS);
+            return response;
+        });
+        List<MediaCreditDto> cast = new ArrayList<>();
+        List<MediaCreditDto> crew = new ArrayList<>();
+        if (data != null) {
+            for (String field : List.of("cast", "guest_stars", "crew")) {
+                for (JsonNode person : data.path(field)) {
+                    boolean isCrew = "crew".equals(field);
+                    String image = person.path("profile_path").asText(null);
+                    MediaCreditDto credit = new MediaCreditDto("tmdb-" + person.path("id").asText(),
+                            person.path("name").asText(), person.path("character").asText(null),
+                            isCrew ? creditsParser.normalizeTMDbRole(person.path("job").asText()) : "Actor",
+                            image == null ? null : "https://image.tmdb.org/t/p/w200" + image);
+                    if (isCrew) crew.add(credit);
+                    else if (cast.stream().noneMatch(c -> c.getId().equals(credit.getId()))) cast.add(credit);
+                }
+            }
+        }
+        return java.util.Map.of("cast", cast, "crew", crew);
     }
 
     public List<DiscoverItemDto> discover(String type, Integer genreId, String year, String sort, int page) {

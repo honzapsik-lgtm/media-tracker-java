@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+const API_BASE_URL = process.env.BACKEND_API_URL || "http://localhost:8080/api";
 
 export async function apiFetch<T>(
   endpoint: string,
@@ -16,20 +16,17 @@ export async function apiFetch<T>(
 
   // Attach gateway secret and auth if running on the server
   if (typeof window === "undefined") {
-    const gatewaySecret = process.env.INTERNAL_GATEWAY_SECRET || "default-internal-secret-change-in-prod-123456";
+    const gatewaySecret = process.env.INTERNAL_GATEWAY_SECRET;
+    if (!gatewaySecret?.trim()) {
+      throw new Error("INTERNAL_GATEWAY_SECRET must be configured for backend requests");
+    }
     headers.set("X-Internal-Gateway-Key", gatewaySecret);
 
-    if (!headers.has("Authorization") && !headers.has("X-User-Id")) {
+    if (!headers.has("X-User-Id")) {
       try {
         const session = await getServerSession(authOptions);
         if (session?.user?.id) {
           headers.set("X-User-Id", session.user.id);
-          if (session.user.role) {
-            headers.set("X-User-Role", session.user.role);
-          }
-          if (session.user.email) {
-            headers.set("X-User-Email", session.user.email);
-          }
         }
       } catch {
         // Ignore if session is not available

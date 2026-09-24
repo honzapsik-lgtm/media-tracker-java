@@ -1,6 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { UnifiedCredit } from "@/types/person";
 
@@ -9,45 +6,7 @@ interface PersonCreditsProps {
   personSlug: string;
 }
 
-export default function PersonCredits({ initialCredits, personSlug }: PersonCreditsProps) {
-  const [credits, setCredits] = useState<{ cast: UnifiedCredit[]; crew: UnifiedCredit[] }>(initialCredits);
-  const [isSyncing, setIsSyncing] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    let timer: NodeJS.Timeout;
-
-    const pollSyncStatus = async () => {
-      try {
-        const res = await fetch(`/api/person/${personSlug}/sync-status`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!active) return;
-
-        if (data.credits) {
-          setCredits(data.credits);
-        }
-        setIsSyncing(data.isSyncing);
-
-        if (data.isSyncing) {
-          timer = setTimeout(pollSyncStatus, 1500);
-        }
-      } catch (e) {
-        console.error("Failed to poll sync status", e);
-        if (active) {
-          timer = setTimeout(pollSyncStatus, 2000);
-        }
-      }
-    };
-
-    pollSyncStatus();
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [personSlug]);
-
+export default function PersonCredits({ initialCredits: credits }: PersonCreditsProps) {
   // Grouping credits by decade/year
   const groupCredits = (items: UnifiedCredit[]) => {
     const sorted = [...items].sort((a, b) => (b.releaseYear || 0) - (a.releaseYear || 0));
@@ -70,38 +29,6 @@ export default function PersonCredits({ initialCredits, personSlug }: PersonCred
 
   const hasCredits = credits.cast.length > 0 || credits.crew.length > 0;
 
-  // 1. Full section loading skeleton until credits are loaded
-  if (isSyncing && !hasCredits) {
-    return (
-      <section className="space-y-8">
-        <div className="flex items-center gap-4 mb-10">
-          <h2 className="text-3xl font-black text-white">Credits</h2>
-          <div className="h-px flex-1 bg-gradient-to-r from-gray-800 to-transparent"></div>
-        </div>
-        <div className="flex items-center gap-3 text-gray-400 bg-gray-900/50 p-4 rounded-xl border border-gray-800/50 w-full mb-6 animate-pulse">
-          <span className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-ping shrink-0"></span>
-          <span className="text-sm font-semibold">Syncing credits from TMDb, AniList, and RAWG...</span>
-        </div>
-        <div className="space-y-6">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="space-y-3 animate-pulse">
-              <div className="flex items-center gap-4 pt-4 pb-2">
-                <div className="w-16 h-5 bg-gray-900 rounded shrink-0"></div>
-                <div className="h-[2px] flex-1 bg-gray-950"></div>
-              </div>
-              <div className="space-y-3">
-                {[1, 2].map(j => (
-                  <div key={j} className="h-14 bg-gray-900/20 border border-gray-900/50 rounded-xl w-full"></div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  // Fallback if no credits are found and sync has completed
   if (!hasCredits) {
     return (
       <section>
@@ -123,12 +50,6 @@ export default function PersonCredits({ initialCredits, personSlug }: PersonCred
         <div className="h-px flex-1 bg-gradient-to-r from-gray-800 to-transparent"></div>
       </div>
 
-      {isSyncing && (
-        <div className="flex items-center gap-3 text-gray-400 bg-gray-900/50 p-4 rounded-xl border border-gray-800/50 w-full mb-6 animate-pulse">
-          <span className="w-2.5 h-2.5 bg-yellow-500 rounded-full animate-ping shrink-0"></span>
-          <span className="text-sm font-semibold">Resolving game developer roles and syncing other platforms...</span>
-        </div>
-      )}
 
       <div className="flex flex-col gap-16 w-full">
         {/* CAST */}
@@ -170,14 +91,7 @@ export default function PersonCredits({ initialCredits, personSlug }: PersonCred
                               <span className="text-gray-600 text-xs hidden sm:inline">•</span>
                               {c.isVoiceRole && <span className="text-[9px] font-black uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded shrink-0">Voice</span>}
                               
-                              {isRoleResolving ? (
-                                <div className="flex items-center gap-1.5 animate-pulse bg-gray-950 px-2 py-0.5 rounded border border-gray-800 shrink-0">
-                                  <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-ping"></span>
-                                  <span className="text-[10px] text-gray-500 italic">Resolving role...</span>
-                                </div>
-                              ) : (
-                                <span className="text-sm text-gray-400 truncate">{displayRole}</span>
-                              )}
+                              <span className="text-sm text-gray-400 truncate">{displayRole}</span>
                             </div>
                           </div>
                           
@@ -239,14 +153,7 @@ export default function PersonCredits({ initialCredits, personSlug }: PersonCred
                             <h4 className="font-bold text-base text-gray-200 truncate group-hover:text-white">{c.title}</h4>
                             <span className="text-gray-600 text-xs hidden sm:inline">•</span>
                             
-                            {isRoleResolving ? (
-                              <div className="flex items-center gap-1.5 animate-pulse bg-gray-950 px-2 py-0.5 rounded border border-gray-800 shrink-0">
-                                <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-ping"></span>
-                                <span className="text-[10px] text-gray-500 italic">Resolving role...</span>
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-400 truncate">{displayRole}</p>
-                            )}
+                            <p className="text-sm text-gray-400 truncate">{displayRole}</p>
                           </div>
                           
                           <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded bg-gray-950 text-gray-500 border border-gray-800 shrink-0">

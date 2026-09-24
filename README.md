@@ -80,7 +80,7 @@ flowchart LR
 - **Concurrency:** Java 21 Virtual Threads enabled (`spring.threads.virtual.enabled: true`) for lightweight, non-blocking I/O throughput.
 - **Persistence & ORM:** **Spring Data JPA** with **Hibernate 6.6** and HikariCP connection pooling.
 - **Database Migrations:** **Flyway** migration manager executing versioned SQL scripts (`V1__init_schema.sql`, `V2__seed_test_users.sql`, `V3__fix_mangadex_cover_urls.sql`) on startup.
-- **Security:** **Spring Security 6** with a stateless `JwtAuthenticationFilter` supporting internal gateway signatures (`X-Internal-Gateway-Key`) and role-based authority mapping (`ROLE_USER`, `ROLE_ADMIN`, `ROLE_SYSTEM`).
+- **Security:** **Spring Security 6** with a stateless `GatewayAuthenticationFilter`. Next.js authenticates the browser with NextAuth and forwards the database user ID with `X-Internal-Gateway-Key`. Java validates the shared key, loads the account and its current role from PostgreSQL, and authorizes the request. A gateway request without a user can synchronize OAuth identities but cannot access admin endpoints. The obsolete, unverified bearer-token parser has been removed.
 - **API Documentation:** Integrated **OpenAPI 3 / Swagger UI** (`/swagger-ui.html`, `/v3/api-docs`).
 - **Build System:** **Gradle** with the Gradle Wrapper (`./gradlew`).
 
@@ -88,8 +88,22 @@ flowchart LR
 - **Framework:** **Next.js 16** utilizing the App Router paradigm, React Server Components (RSC), and Turbopack compiler.
 - **Language:** **TypeScript 5** with strict type contracts across UI components, API wrappers, and server actions.
 - **UI & Styling:** **React 19**, **Tailwind CSS v4** (high-contrast dark-mode glassmorphic theme), and **Lucide React** icon library.
-- **Authentication:** **NextAuth.js v4** with OAuth providers (**Discord**, **Google**), integrated with backend OAuth synchronization (`/api/auth/oauth-sync`) and dynamic token role self-healing.
+- **Authentication:** **NextAuth.js v4** with OAuth providers (**Discord**, **Google**), integrated with backend OAuth synchronization (`/api/auth/oauth-sync`). Session refreshes retrieve profile and role changes from `/api/auth/me`; sign-in requires successful backend synchronization. Provider account IDs and avatar URLs are not substitutes for database user IDs.
 - **Backend Communication:** Type-safe API client (`src/lib/api-client.ts`) transparently proxying server-side requests with internal security headers.
+
+### Service Ownership
+
+The Next.js application owns rendering, browser interactions, NextAuth, and same-origin API forwarding. It does not access PostgreSQL or call media providers. Its media, person, company, and admin helpers are adapters for Java responses, not alternate backend implementations.
+
+The Java backend owns provider credentials and requests, persistent API caching, media/season/episode resolution, anime canon rules and themes, manga chapter feeds, creator/company profiles, scoring, social data, admin diagnostics, and background processing. Creator and company profile endpoints preserve the UI's unified credit/portfolio contracts across TMDb, AniList, IGDB, RAWG, and MangaDex where supported.
+
+The old TypeScript provider clients, in-memory provider cache, ranking configuration, Prisma utilities, migration polling components, and `/api/worker` placeholder are removed. Spring schedules the job queue directly; the admin process action invokes a real bounded Java batch. Diagnostics query PostgreSQL instead of returning hard-coded zeros or empty arrays. Frontend request logging remains structured console output; database log inspection reads Java's PostgreSQL diagnostics endpoints.
+
+Historical database table names and Flyway migrations remain intact for compatibility with existing data. Removing the old runtime does not wipe users, ratings, friendships, or provider mappings.
+
+The migrated Java endpoints include `GET /api/person/{slug}`, `GET /api/company/{slug}`, media chapter feeds and chapter metadata under `/api/media/{slug}`, season themes, and episode credits. The frontend retains same-origin manga routes for browser requests; provider keys never reach these components. Detail resolution allows the cache service to commit fetched provider data independently rather than wrapping the entire lookup in a read-only transaction.
+
+Admin diagnostics under `/api/admin/diagnostics` read database counts, integrity checks, cache metadata, logs, and performance summaries. User/media inspection reads real records and excludes account/session credentials. Job filters are applied in Java before pagination; user stats recalculation queues actual jobs, while media maintenance clears matching provider cache entries or refreshes media statistics. Historical log records are retained; a console log is not automatically a persisted `SystemLog` record.
 
 ### Database & Storage
 - **Engine:** **PostgreSQL 15 / 16**, containerized via Docker (`local_postgres` on port `5432`).
@@ -416,7 +430,7 @@ media-tracker/
 │       │   │   ├── entity/                # JPA Entity definitions
 │       │   │   └── enums/                 # Domain enumerations (MediaType, WatchlistStatus)
 │       │   ├── repository/                # Spring Data JPA repositories
-│       │   ├── security/                  # Spring Security, JWT & Gateway filter
+│       │   ├── security/                  # Spring Security & trusted gateway filter
 │       │   ├── service/                   # Core business logic services
 │       │   │   ├── ActivityService.java
 │       │   │   ├── AdminWipeService.java
@@ -441,7 +455,7 @@ media-tracker/
 ├── frontend/                              # Next.js Application (React 19)
 │   ├── package.json                       # Dependencies & scripts
 │   ├── next.config.ts                     # Next.js configuration
-│   ├── tailwind.config.ts                 # Tailwind styling rules
+│   ├── postcss.config.mjs                 # Tailwind v4 PostCSS integration
 │   └── src/
 │       ├── app/
 │       │   ├── admin/                     # Admin dashboard pages
@@ -486,17 +500,27 @@ media-tracker/
 
 ## 7. Environment Variables & Configuration
 
-### Frontend Configuration (`frontend/.env.local` or root `.env`)
+### Environment Setup
+
+Copy `.env.example` to `.env` in the repository root and fill in the required values. Docker Compose reads this file and explicitly passes configuration to each service. `NEXTAUTH_SECRET` and `INTERNAL_GATEWAY_SECRET` are required; Compose refuses to start when either is empty. Generate a separate random value for each, for example with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+
+For development outside Docker, copy the populated file to `frontend/.env.local` for Next.js and export the backend settings into the terminal environment before running Gradle. Spring Boot does not automatically read a root `.env` file. Both services must use the same `INTERNAL_GATEWAY_SECRET`.
+
+Configure Discord, Google, or both. A provider is enabled only when both its client ID and client secret are present. Register the exact callback URL with the provider: `http://localhost:3000/api/auth/callback/discord` or `http://localhost:3000/api/auth/callback/google`. Update these URLs and `NEXTAUTH_URL` together when changing the public origin.
+
+Compose sets the server-only `BACKEND_API_URL` to `http://backend:8080/api`; local Next.js development uses `http://localhost:8080/api`. The frontend needs neither a database connection nor media-provider credentials. TMDb, Twitch/IGDB, and RAWG credentials belong only to the Java backend and must never be prefixed with `NEXT_PUBLIC_`.
+
+### Frontend Configuration (`frontend/.env.local`)
 ```env
 # Next.js & NextAuth Configuration
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your-secure-nextauth-secret"
 
 # Internal Gateway Bridge (must match backend app.gateway.secret)
-INTERNAL_GATEWAY_SECRET="default-internal-secret-change-in-prod-123456"
+INTERNAL_GATEWAY_SECRET="your-separate-random-gateway-secret"
 
 # Spring Boot Backend URL
-NEXT_PUBLIC_API_URL="http://localhost:8080/api"
+BACKEND_API_URL="http://localhost:8080/api"
 
 # OAuth Providers
 DISCORD_CLIENT_ID="your-discord-client-id"
@@ -504,11 +528,6 @@ DISCORD_CLIENT_SECRET="your-discord-client-secret"
 GOOGLE_CLIENT_ID="your-google-client-id"
 GOOGLE_CLIENT_SECRET="your-google-client-secret"
 
-# Optional Client-Side Provider Keys
-TMDB_API_KEY="your-tmdb-api-key"
-TWITCH_CLIENT_ID="your-twitch-client-id"
-TWITCH_CLIENT_SECRET="your-twitch-client-secret"
-RAWG_API_KEY="your-rawg-api-key"
 ```
 
 ### Backend Configuration (`backend/src/main/resources/application.yml`)
@@ -534,7 +553,7 @@ spring:
 
 app:
   gateway:
-    secret: ${INTERNAL_GATEWAY_SECRET:default-internal-secret-change-in-prod-123456}
+    secret: ${INTERNAL_GATEWAY_SECRET}
   providers:
     tmdb:
       apiKey: ${TMDB_API_KEY:}
@@ -555,14 +574,18 @@ app:
 - **Docker:** Docker Desktop running locally.
 
 ### 2. Start PostgreSQL Database
-Start the containerized PostgreSQL instance via Docker Compose:
+After configuring the root `.env`, start only PostgreSQL for local Java/Next.js development:
 ```bash
-docker-compose up -d
+docker compose up -d db
 ```
 Verify that the `local_postgres` container is healthy on port `5432`:
 ```bash
 docker ps
 ```
+
+To build and run all three services in Docker instead, use `docker compose up -d --build` and skip the separate local backend/frontend launch steps. An existing container named `local_postgres` from another checkout will conflict with this Compose project; do not delete it or its volume to resolve the conflict without first deciding how to preserve its data.
+
+To reuse that existing PostgreSQL container, set `BACKEND_DATABASE_URL` in the root `.env` to its JDBC URL (for Docker Desktop, e.g. `jdbc:postgresql://host.docker.internal:5432/media_java`) and run `docker compose up -d --no-deps --build backend frontend`. Create the target database first. The Java checkout's local setup uses `media_java`, copied from the older `media_app` database, preserving the original database. Frontend and backend ports bind only to `127.0.0.1` for local development.
 
 ### 3. Build & Run the Spring Boot Backend
 From the `backend/` directory:
@@ -582,7 +605,7 @@ The backend will be live on [http://localhost:8080](http://localhost:8080), with
 In a separate terminal, navigate to `frontend/`:
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
@@ -599,11 +622,15 @@ docker exec -it local_postgres psql -U admin -d media_app -c "UPDATE users SET r
 - **Via REST API:**
   ```bash
   curl -X POST "http://localhost:8080/api/admin/ranking" \
-    -H "X-Internal-Gateway-Key: default-internal-secret-change-in-prod-123456" \
-    -H "X-User-Role: admin"
+    -H "X-Internal-Gateway-Key: $INTERNAL_GATEWAY_SECRET" \
+    -H "X-User-Id: YOUR_ADMIN_DATABASE_USER_UUID"
   ```
 
 ### 7. Reset Application Data ("Nuke")
 To purge application media data while preserving user accounts, logins, and admin roles:
 - Navigate to `/admin/database` and click **"NUKE DATABASE"**.
 - Or use the slide-out navigation drawer button (**"Wipe All Local Data"**).
+
+### 8. Verification
+
+Run `./gradlew test` (Windows: `.\gradlew.bat test`) from `backend/` for backend regression tests. PostgreSQL integration tests use disposable Testcontainers databases and require Docker; they do not wipe the application database. The test task defaults to Docker API 1.44 for current Docker Desktop compatibility (override with `-Dapi.version=...` if necessary). From `frontend/`, run `npm run check:architecture` to verify the frontend contains no provider API calls, provider credentials, database dependencies, or old worker implementation, and `node --test tests/admin-jobs.test.cjs` for admin adapter regression tests. `npm run build` runs the architecture check, type-checks, and builds Next.js. Docker builds remain available through `docker compose build backend frontend`.

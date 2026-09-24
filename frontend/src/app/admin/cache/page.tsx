@@ -53,7 +53,6 @@ export default async function AdminCachePage({
       event: "admin.cache.page.denied",
       requestId,
       error,
-      persist: true,
     });
   }
 

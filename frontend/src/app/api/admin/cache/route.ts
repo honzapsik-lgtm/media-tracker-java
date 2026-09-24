@@ -38,7 +38,6 @@ export async function GET(request: Request) {
       event: error instanceof AdminAuthError ? "admin.cache.denied" : "admin.cache.failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

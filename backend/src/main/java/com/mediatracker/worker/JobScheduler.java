@@ -33,22 +33,40 @@ public class JobScheduler {
 
     @Scheduled(fixedDelay = 5000)
     public void processNextJob() {
-        Optional<BackgroundJobEntity> jobOpt = jobQueueManager.claimJob(workerId);
-        if (jobOpt.isEmpty()) return;
+        processBatch(1);
+    }
 
-        BackgroundJobEntity job = jobOpt.get();
-        log.info("Worker {} picked up job {} [{}]", workerId, job.getId(), job.getType());
+    public record BatchResult(boolean ok, String workerId, int processed, int completed, int retried, int failed) {}
 
-        try {
-            executeJob(job);
-            jobQueueManager.completeJob(job.getId());
-        } catch (Exception e) {
-            log.error("Worker {} failed executing job {}: {}", workerId, job.getId(), e.getMessage(), e);
-            java.io.StringWriter sw = new java.io.StringWriter();
-            e.printStackTrace(new java.io.PrintWriter(sw));
-            String fullError = sw.toString();
-            jobQueueManager.failJob(job.getId(), fullError.length() > 4000 ? fullError.substring(0, 4000) : fullError);
+    public BatchResult processBatch(int batchSize) {
+        if (batchSize < 1 || batchSize > 100) {
+            throw new IllegalArgumentException("batchSize must be between 1 and 100");
         }
+        int completed = 0;
+        int retried = 0;
+        int failed = 0;
+        for (int i = 0; i < batchSize; i++) {
+            Optional<BackgroundJobEntity> jobOpt = jobQueueManager.claimJob(workerId);
+            if (jobOpt.isEmpty()) break;
+
+            BackgroundJobEntity job = jobOpt.get();
+            log.info("Worker {} picked up job {} [{}]", workerId, job.getId(), job.getType());
+
+            try {
+                executeJob(job);
+                jobQueueManager.completeJob(job.getId());
+                completed++;
+            } catch (Exception e) {
+                log.error("Worker {} failed executing job {}: {}", workerId, job.getId(), e.getMessage(), e);
+                java.io.StringWriter sw = new java.io.StringWriter();
+                e.printStackTrace(new java.io.PrintWriter(sw));
+                String fullError = sw.toString();
+                boolean retry = jobQueueManager.failJob(job.getId(), fullError.length() > 4000 ? fullError.substring(0, 4000) : fullError);
+                if (retry) retried++;
+                else failed++;
+            }
+        }
+        return new BatchResult(true, workerId, completed + retried + failed, completed, retried, failed);
     }
 
     private void executeJob(BackgroundJobEntity job) {
@@ -75,7 +93,7 @@ public class JobScheduler {
             }
             case "recalculate_ranks" -> pageRankAggregationService.processAllMediaTypes();
             case "sweep_ranks" -> pageRankAggregationService.sweepRanks();
-            default -> log.warn("Unknown background job type: {}", type);
+            default -> throw new IllegalArgumentException("Unknown background job type: " + type);
         }
     }
 

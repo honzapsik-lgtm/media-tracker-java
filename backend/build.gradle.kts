@@ -28,7 +28,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-security")
-    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
 
     implementation("org.postgresql:postgresql")
     implementation("org.flywaydb:flyway-core")
@@ -47,4 +46,6 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Current Docker Desktop rejects the old docker-java default API version.
+    systemProperty("api.version", System.getProperty("api.version", "1.44"))
 }

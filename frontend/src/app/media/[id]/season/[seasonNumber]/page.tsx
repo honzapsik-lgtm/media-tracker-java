@@ -1,5 +1,4 @@
-import { getSeasonEpisodes } from "@/app/actions";
-import { getTMDbDetails, cleanStudioData } from "@/lib/tmdb";
+import { getMediaPageDetails, getMediaSeasonEpisodes, cleanStudioData, getSeasonThemes, getMediaRankings } from "@/lib/media-api";
 import RatingSlider from "@/components/RatingSlider";
 import EpisodeList from "@/components/EpisodeList";
 import Link from "next/link";
@@ -81,13 +80,12 @@ export default async function SeasonPage({
   const seasonNum = parseInt(seasonNumber, 10);
   if (Number.isNaN(seasonNum) || seasonNum < 0) notFound();
 
-  showDetails = await getTMDbDetails(tmdbId, "tv");
+  showDetails = await getMediaPageDetails(id);
   if (!showDetails || showDetails.type !== "show") notFound();
 
-  episodes = await getSeasonEpisodes(tmdbId, seasonNum);
+  episodes = await getMediaSeasonEpisodes(id, seasonNum);
 
-  const { getAdjustedSeasons } = await import("@/lib/anime-canon");
-  const seasons = getAdjustedSeasons(tmdbId, showDetails.seasons) as TmdbSeasonSummary[];
+  const seasons = (showDetails.seasons || []) as TmdbSeasonSummary[];
   const allSeasonNumbers = seasons.map((s) => s.season_number);
 
   if (!allSeasonNumbers.includes(seasonNum)) notFound();
@@ -116,8 +114,7 @@ export default async function SeasonPage({
   seasonTrailerUrl = showDetails.trailerUrl || null;
 
   if (showDetails.originalLanguage === "ja" && showDetails.genres?.includes("Animation")) {
-    const { fetchAnimeThemesForSeason } = await import("@/lib/jikan");
-    seasonThemeData = await fetchAnimeThemesForSeason(showTitle, seasonNum, seasonLabel, showDetails.originalTitle, showDetails.seasons);
+    seasonThemeData = await getSeasonThemes(id, seasonNum);
   }
 
   const crewCredits = showDetails.credits || [];
@@ -133,18 +130,24 @@ export default async function SeasonPage({
 
   let stats: { community_average?: number; total_ratings?: number } | null = null;
   let globalCriteriaAverages: Record<string, number> = {};
-  const placementRank: number | null = null;
-  const reviews: any[] = [];
+  let placementRank: number | null = null;
+  let reviews: any[] = [];
 
   try {
     const ratingData = await getRatings(seasonMediaId);
     if (ratingData?.stats) stats = ratingData.stats;
+    reviews = ratingData?.reviews || [];
     if (ratingData?.globalCriteriaAverages) globalCriteriaAverages = ratingData.globalCriteriaAverages;
   } catch {
     // API offline or not rated yet
   }
 
   const activeCriteriaConfig = CRITERIA_CONFIG["show"] || [];
+  try {
+    placementRank = (await getMediaRankings([seasonMediaId])).ranks[seasonMediaId] ?? null;
+  } catch {
+    // Optional ranking data must not hide the season.
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white relative pb-24">
@@ -186,12 +189,12 @@ export default async function SeasonPage({
             <AnimeThemes themeData={seasonThemeData} />
           </div>
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight mb-4">
               {seasonFullTitle}
             </h1>
 
-            <div className="flex items-center gap-3 mt-3 mb-4">
+            <div className="flex flex-wrap items-center gap-3 mt-3 mb-4">
               {seasonAirDate && (
                 <span className="text-gray-300 font-bold text-sm">
                   {seasonAirDate.split('-')[0]}
@@ -347,7 +350,7 @@ export default async function SeasonPage({
           <div className="grid lg:grid-cols-3 gap-12 pt-8 border-t border-gray-800">
             {showDetails?.cast && showDetails.cast.length > 0 && (
               <div className="lg:col-span-2">
-                <ExpandableCast cast={showDetails.cast.map((c: any) => ({ ...c, id: `tmdb-${c.id}`, role: c.character }))} />
+                <ExpandableCast cast={showDetails.cast.map((c: any) => ({ ...c, id: c.id, role: c.character }))} />
               </div>
             )}
             {seasonTrailerUrl && (

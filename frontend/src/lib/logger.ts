@@ -1,5 +1,3 @@
-import { PERF_WARN_THRESHOLD_MS } from "@/lib/admin-constants";
-
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export type AppLogInput = {
@@ -14,24 +12,6 @@ export type AppLogInput = {
   durationMs?: number;
   metadata?: Record<string, unknown>;
   error?: unknown;
-  persist?: boolean;
-};
-
-type TimeOperationInput = Omit<AppLogInput, "level" | "durationMs" | "error"> & {
-  level?: Extract<LogLevel, "debug" | "info">;
-  slowThresholdMs?: number;
-  persistSlow?: boolean;
-};
-
-type SlowOperationInput = {
-  operation: string;
-  durationMs: number;
-  requestId?: string;
-  userId?: string;
-  mediaId?: string;
-  mediaType?: string;
-  thresholdMs?: number;
-  metadata?: Record<string, unknown>;
 };
 
 const REDACTED = "[REDACTED]";
@@ -148,73 +128,4 @@ export async function appLog(input: AppLogInput) {
   };
 
   consoleWrite(input.level, payload);
-}
-
-export async function timeOperation<T>(
-  input: TimeOperationInput,
-  operation: () => Promise<T>
-) {
-  const startedAt = performance.now();
-  const thresholdMs = input.slowThresholdMs ?? PERF_WARN_THRESHOLD_MS;
-
-  try {
-    const result = await operation();
-    const durationMs = Math.round(performance.now() - startedAt);
-    if (durationMs >= thresholdMs) {
-      await logSlowOperation({
-        operation: input.event,
-        durationMs,
-        requestId: input.requestId,
-        userId: input.userId,
-        mediaId: input.mediaId,
-        mediaType: input.mediaType,
-        thresholdMs,
-        metadata: input.metadata,
-      });
-    } else if (input.persist === true) {
-      await appLog({
-        ...input,
-        level: input.level ?? "info",
-        durationMs,
-        persist: true,
-      });
-    } else if (input.persistSlow === false) {
-      await appLog({
-        ...input,
-        level: input.level ?? "debug",
-        durationMs,
-        persist: false,
-      });
-    }
-    return result;
-  } catch (error) {
-    const durationMs = Math.round(performance.now() - startedAt);
-    await appLog({
-      ...input,
-      level: "error",
-      durationMs,
-      error,
-      persist: true,
-    });
-    throw error;
-  }
-}
-
-export async function logSlowOperation(input: SlowOperationInput) {
-  await appLog({
-    level: "warn",
-    event: "performance.slow_operation",
-    message: `${input.operation} took ${input.durationMs}ms`,
-    requestId: input.requestId,
-    userId: input.userId,
-    mediaId: input.mediaId,
-    mediaType: input.mediaType,
-    durationMs: input.durationMs,
-    metadata: {
-      operation: input.operation,
-      thresholdMs: input.thresholdMs ?? PERF_WARN_THRESHOLD_MS,
-      ...input.metadata,
-    },
-    persist: true,
-  });
 }

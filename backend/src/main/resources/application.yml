@@ -36,18 +36,16 @@ spring:
     locations: classpath:db/migration
 
 app:
-  jwt:
-    secret: ${NEXTAUTH_SECRET:6fR+w7BvNqT5zX9kM2pY1vL8sK4jD0mA3gH7fK9sJ5w=}
   gateway:
-    secret: ${INTERNAL_GATEWAY_SECRET:default-internal-secret-change-in-prod-123456}
+    secret: ${INTERNAL_GATEWAY_SECRET}
   providers:
     tmdb:
-      api-key: ${TMDB_API_KEY:34ff2df714dec461e40cc4bae1933672}
+      api-key: ${TMDB_API_KEY:}
     twitch:
-      client-id: ${TWITCH_CLIENT_ID:oy55fz44hkvyoe3to1tkbjjqq4r0se}
-      client-secret: ${TWITCH_CLIENT_SECRET:ai8ne80tuq1eqemrxefcbo0wg3fhfw}
+      client-id: ${TWITCH_CLIENT_ID:}
+      client-secret: ${TWITCH_CLIENT_SECRET:}
     rawg:
-      api-key: ${RAWG_API_KEY:122ec61c4d864b9c851d6ccf7a0beac9}
+      api-key: ${RAWG_API_KEY:}
 
 management:
   endpoints:

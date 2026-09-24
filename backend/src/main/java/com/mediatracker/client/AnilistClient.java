@@ -90,6 +90,7 @@ public class AnilistClient {
 
             if (response != null && response.has("data") && response.get("data").has("Media")) {
                 JsonNode media = response.get("data").get("Media");
+                if (media == null || media.isNull()) return Optional.empty();
                 cacheService.put(cacheKey, "anilist", media, CACHE_TTL_SECONDS);
                 return Optional.of(media);
             }
@@ -97,6 +98,30 @@ public class AnilistClient {
             log.warn("Anilist query failed for id {}: {}", anilistId, e.getMessage());
         }
 
+        return Optional.empty();
+    }
+
+    public Optional<Integer> getTmdbMapping(int anilistId) {
+        String key = "anilist-tmdb-mapping-" + anilistId;
+        Optional<Integer> cached = cacheService.get(key, Integer.class);
+        if (cached.isPresent()) return cached;
+        try {
+            JsonNode data = restClient.get().uri("https://api.malsync.moe/mal/anime/anilist:" + anilistId)
+                    .retrieve().body(JsonNode.class);
+            if (data != null) {
+                var entries = data.path("Sites").path("TMDB").fields();
+                if (entries.hasNext()) {
+                    var entry = entries.next();
+                    int id = Integer.parseInt(entry.getValue().path("id").asText(entry.getKey()));
+                    if (id > 0) {
+                        cacheService.put(key, "anilist", id, CACHE_TTL_SECONDS);
+                        return Optional.of(id);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("TMDb mapping unavailable for AniList {}: {}", anilistId, e.getMessage());
+        }
         return Optional.empty();
     }
 

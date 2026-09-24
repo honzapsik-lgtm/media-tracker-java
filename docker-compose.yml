@@ -19,16 +19,16 @@ services:
     container_name: media_backend
     restart: always
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/media_app
+      SPRING_DATASOURCE_URL: ${BACKEND_DATABASE_URL:-jdbc:postgresql://db:5432/media_app}
       SPRING_DATASOURCE_USERNAME: admin
       SPRING_DATASOURCE_PASSWORD: localpassword123
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-default-fallback-secret-for-development-change-in-production-123456}
+      INTERNAL_GATEWAY_SECRET: ${INTERNAL_GATEWAY_SECRET:?Set INTERNAL_GATEWAY_SECRET in the root .env}
       TMDB_API_KEY: ${TMDB_API_KEY:-}
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
       RAWG_API_KEY: ${RAWG_API_KEY:-}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - db
 
@@ -40,11 +40,15 @@ services:
     restart: always
     environment:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-default-fallback-secret-for-development-change-in-production-123456}
-      NEXT_PUBLIC_API_URL: http://backend:8080/api
-      DATABASE_URL: postgresql://admin:localpassword123@db:5432/media_app
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in the root .env}
+      INTERNAL_GATEWAY_SECRET: ${INTERNAL_GATEWAY_SECRET:?Set INTERNAL_GATEWAY_SECRET in the root .env}
+      BACKEND_API_URL: http://backend:8080/api
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - backend
 

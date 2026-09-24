@@ -1,9 +1,8 @@
-import { getSeasonEpisodes } from "@/app/actions";
+import { getMediaPageDetails, getMediaSeasonEpisodes, getEpisodeCredits, getMediaRankings } from "@/lib/media-api";
 import RatingSlider from "@/components/RatingSlider";
 import ExpandableText from "@/components/ExpandableText";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getTMDbDetails } from "@/lib/tmdb";
 import type { Episode } from "@/app/media/[id]/season/[seasonNumber]/page";
 import TextReviewEditor from "@/components/TextReviewEditor";
 import { CRITERIA_CONFIG } from "@/lib/constants";
@@ -41,11 +40,15 @@ export default async function EpisodePage({
   }
 
   const tmdbId = parts[2];
-  episodes = await getSeasonEpisodes(tmdbId, seasonNum);
+  episodes = await getMediaSeasonEpisodes(id, seasonNum);
   episode = episodes.find((ep) => ep.episode_number === epNum) || null;
   if (!episode) notFound();
 
-  showDetails = await getTMDbDetails(tmdbId, "tv");
+  showDetails = await getMediaPageDetails(id);
+  const credits = await getEpisodeCredits(id, seasonNum, epNum);
+  episodeCrew = { primary: credits.crew.filter((c: any) => ['Director', 'Writer', 'Composer'].includes(c.role)),
+    secondary: credits.crew.filter((c: any) => !['Director', 'Writer', 'Composer'].includes(c.role)) };
+  episodeCastData = credits.cast;
   showTitle = showDetails?.title || "Unknown Show";
   episodeFullTitle = `${showTitle} - S${seasonNum} E${episode.episode_number} - ${episode.name}`;
   episodeMediaId = `${id}-s${seasonNum}-e${epNum}`;
@@ -65,18 +68,24 @@ export default async function EpisodePage({
 
   let stats: { community_average?: number; total_ratings?: number } | null = null;
   let globalCriteriaAverages: Record<string, number> = {};
-  const placementRank: number | null = null;
-  const reviews: any[] = [];
+  let placementRank: number | null = null;
+  let reviews: any[] = [];
 
   try {
     const ratingData = await getRatings(episodeMediaId);
     if (ratingData?.stats) stats = ratingData.stats;
+    reviews = ratingData?.reviews || [];
     if (ratingData?.globalCriteriaAverages) globalCriteriaAverages = ratingData.globalCriteriaAverages;
   } catch {
     // API offline or not rated yet
   }
 
   const activeCriteriaConfig = CRITERIA_CONFIG["show"] || [];
+  try {
+    placementRank = (await getMediaRankings([episodeMediaId])).ranks[episodeMediaId] ?? null;
+  } catch {
+    // Optional ranking data must not hide the episode.
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white relative pb-24">
@@ -119,7 +128,7 @@ export default async function EpisodePage({
           </div>
 
           {/* Right Column: Details & Scores */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight mb-4 drop-shadow-md">
               {episode.name}
             </h1>
@@ -272,10 +281,10 @@ export default async function EpisodePage({
           </div>
 
         {/* EPISODE CAST */}
-        {showDetails?.cast && showDetails.cast.length > 0 && (
+        {episodeCastData?.length > 0 && (
           <div className="pt-8 border-t border-gray-800">
             <h2 className="text-2xl font-bold mb-6 mt-2">Cast</h2>
-            <ExpandableCast cast={showDetails.cast.map((c: any) => ({ ...c, id: `tmdb-${c.id}`, role: c.character }))} />
+            <ExpandableCast cast={episodeCastData.map((c: any) => ({ ...c, role: c.character }))} />
           </div>
         )}
 

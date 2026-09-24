@@ -21,10 +21,10 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final GatewayAuthenticationFilter gatewayAuthenticationFilter;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    public SecurityConfig(GatewayAuthenticationFilter gatewayAuthenticationFilter) {
+        this.gatewayAuthenticationFilter = gatewayAuthenticationFilter;
     }
 
     @Bean
@@ -42,6 +42,7 @@ public class SecurityConfig {
                                 "/actuator/**"
                         ).permitAll()
                         .requestMatchers("/api/media/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/person/**", "/api/company/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/discover/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/search/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/rankings/**").permitAll()
@@ -50,15 +51,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reviews").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/profile/**").permitAll()
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/cron/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/oauth-sync").hasRole("GATEWAY")
                         // Admin endpoints
-                        .requestMatchers("/api/admin/**", "/api/debug/**").hasAnyRole("ADMIN", "SYSTEM")
+                        .requestMatchers("/api/admin/**", "/api/debug/**", "/api/cron/**").hasRole("ADMIN")
                         // Everything else requires auth
-                        .requestMatchers("/api/**").authenticated()
+                        .requestMatchers("/api/**").hasAnyRole("USER", "ADMIN")
                         .anyRequest().permitAll()
                 )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(gatewayAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

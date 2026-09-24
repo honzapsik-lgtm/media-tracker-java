@@ -18,7 +18,6 @@ export async function POST(request: Request) {
         event: "admin.job.mark_stuck_failed_confirmation_missing",
         requestId,
         userId: admin.id,
-        persist: true,
       });
       return confirmationRequiredResponse(requestId);
     }
@@ -38,7 +37,6 @@ export async function POST(request: Request) {
       requestId,
       userId: admin.id,
       metadata: { olderThanMinutes, count: res.updatedCount },
-      persist: true,
     });
     return NextResponse.json({ ok: true, count: res.updatedCount });
   } catch (error) {
@@ -47,7 +45,6 @@ export async function POST(request: Request) {
       event: "admin.job.mark_stuck_failed_failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

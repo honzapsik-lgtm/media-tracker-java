@@ -8,7 +8,6 @@ import com.mediatracker.repository.MediaStatsRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -50,7 +49,6 @@ public class MediaService {
         this.objectMapper = objectMapper;
     }
 
-    @Transactional(readOnly = true)
     public Optional<MediaItemDto> getMediaDetails(String slug) {
         if (slug == null || slug.isBlank()) return Optional.empty();
         String[] parts = slug.split("-");
@@ -68,18 +66,20 @@ public class MediaService {
                         MediaItemDto dto = itemOpt.get();
                         boolean isMovie = "movie".equalsIgnoreCase(dto.getType());
 
-                        // Anime themes
-                        Optional<AnimeThemeDto> themes = animeThemesClient.fetchThemes(dto.getTitle(), dto.getOriginalTitle(), isMovie);
-                        if (themes.isEmpty()) {
-                            themes = jikanClient.searchAnimeThemes(dto.getTitle(), dto.getOriginalTitle(), isMovie);
+                        boolean isAnime = "ja".equals(dto.getOriginalLanguage()) && dto.getGenres().contains("Animation");
+                        if (isAnime) {
+                            Optional<AnimeThemeDto> themes = animeThemesClient.fetchThemes(dto.getTitle(), dto.getOriginalTitle(), isMovie);
+                            if (themes.isEmpty()) themes = jikanClient.searchAnimeThemes(dto.getTitle(), dto.getOriginalTitle(), isMovie);
+                            themes.ifPresent(dto::setThemeData);
+                            anilistClient.searchManga(dto.getTitle()).stream().findFirst().ifPresent(m ->
+                                    dto.setRelatedManga(Map.of("id", m.getId(), "title", m.getTitle(), "image", m.getImage() != null ? m.getImage() : "")));
                         }
-                        themes.ifPresent(dto::setThemeData);
 
                         // If TV show, adjust seasons and canon movies
                         if (!isMovie) {
-                            if (dto.getSeasons() instanceof List) {
-                                @SuppressWarnings("unchecked")
-                                List<Map<String, Object>> seasonsList = (List<Map<String, Object>>) dto.getSeasons();
+                            if (dto.getSeasons() != null) {
+                                List<Map<String, Object>> seasonsList = objectMapper.convertValue(dto.getSeasons(),
+                                        new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
                                 dto.setSeasons(animeCanonService.getAdjustedSeasons(String.valueOf(id), seasonsList));
                             }
                             List<AnimeCanonService.CanonMovieItem> canonMovies = animeCanonService.getCanonMoviesForShow(String.valueOf(id));
@@ -87,10 +87,6 @@ public class MediaService {
                                 dto.setCanonMovies(new ArrayList<>(canonMovies));
                             }
 
-                            // Related manga check
-                            anilistClient.searchManga(dto.getTitle()).stream().findFirst().ifPresent(m -> {
-                                dto.setRelatedManga(Map.of("id", m.getId(), "title", m.getTitle(), "image", m.getImage() != null ? m.getImage() : ""));
-                            });
                         }
                     }
                 } catch (NumberFormatException e) {
@@ -123,6 +119,7 @@ public class MediaService {
                         return getMediaDetails("igdb-game-" + igdbId.get());
                     }
                     itemOpt = rawgClient.getGameDetails(rawgId);
+                    itemOpt.ifPresent(dto -> dto.setCredits(rawgClient.getGameCrew(dto.getTitle(), parseYear(dto.getReleaseDate()))));
                 } catch (NumberFormatException e) {
                     log.warn("Invalid RAWG ID in slug: {}", slug);
                 }
@@ -133,32 +130,75 @@ public class MediaService {
                 itemOpt = mangaDexClient.getMangaDetails(mdId);
             }
         } else if (parts[0].equalsIgnoreCase("anilist")) {
-            if (parts.length >= 3 && parts[1].equalsIgnoreCase("manga")) {
+            if (parts.length == 2 || (parts.length == 3 && List.of("manga", "anime", "show", "movie").contains(parts[1]))) {
                 try {
-                    int id = Integer.parseInt(parts[2]);
-                    itemOpt = anilistClient.getDetails(id);
+                    int id = Integer.parseInt(parts[parts.length - 1]);
+                    itemOpt = resolveAnilist(id);
                 } catch (NumberFormatException e) {
                     log.warn("Invalid AniList ID in slug: {}", slug);
                 }
             }
-        }
-
-        // Attach community stats if present
-        if (itemOpt.isPresent()) {
-            MediaItemDto dto = itemOpt.get();
-            Optional<MediaStatsEntity> stats = mediaStatsRepository.findById(dto.getId());
-            if (stats.isPresent()) {
-                MediaStatsEntity s = stats.get();
-                if (s.getCommunityAverage() != null) {
-                    dto.setGlobalScore(s.getCommunityAverage().intValue());
-                }
+        } else if (parts.length == 3 && "jikan".equalsIgnoreCase(parts[0]) && "manga".equalsIgnoreCase(parts[1])) {
+            try {
+                itemOpt = mangaDexClient.getMangaByMalId(Integer.parseInt(parts[2]));
+            } catch (NumberFormatException e) {
+                return Optional.empty();
             }
         }
 
+        itemOpt.ifPresent(this::enrichManga);
         return itemOpt;
     }
 
+    private void enrichManga(MediaItemDto dto) {
+        if (!"manga".equals(dto.getType()) || dto.getAnilistId() == null) return;
+        anilistClient.getAnilistRawDetails(dto.getAnilistId()).ifPresent(data -> {
+            if (data.isNull()) return;
+            dto.setBackdrop(data.path("bannerImage").asText(dto.getBackdrop()));
+            if (data.path("averageScore").asInt() > 0) dto.setGlobalScore(data.path("averageScore").asInt());
+            if (dto.getChapters() == null && data.path("chapters").asInt() > 0) dto.setChapters(data.path("chapters").asInt());
+            if (dto.getVolumes() == null && data.path("volumes").asInt() > 0) dto.setVolumes(data.path("volumes").asInt());
+            if ("youtube".equals(data.path("trailer").path("site").asText())) {
+                dto.setTrailerUrl("https://www.youtube.com/embed/" + data.path("trailer").path("id").asText());
+            }
+            List<Object> links = new ArrayList<>();
+            data.path("externalLinks").forEach(link -> links.add(objectMapper.convertValue(link, Map.class)));
+            dto.setExternalLinks(links);
+            List<Object> related = new ArrayList<>();
+            for (var edge : data.path("relations").path("edges")) {
+                var node = edge.path("node");
+                if (!List.of("MANGA", "NOVEL", "ONE_SHOT").contains(node.path("format").asText())) continue;
+                String title = node.path("title").path("english").asText(node.path("title").path("romaji").asText("Unknown"));
+                related.add(Map.of("id", "anilist-manga-" + node.path("id").asInt(), "title", title,
+                        "type", "MANGA", "relationLabel", edge.path("relationType").asText("Related").replace('_', ' ')));
+            }
+            dto.setRelatedMedia(related);
+        });
+    }
+
+    private Optional<MediaItemDto> resolveAnilist(int id) {
+        Optional<MediaItemDto> item = anilistClient.getDetails(id);
+        if (item.isEmpty() || "manga".equals(item.get().getType())) {
+            Optional<MediaItemDto> manga = mangaDexClient.getMangaByAniListId(id);
+            if (manga.isPresent()) item = manga;
+        } else {
+            Optional<Integer> tmdbId = anilistClient.getTmdbMapping(id);
+            if (tmdbId.isPresent()) {
+                boolean feature = anilistClient.getAnilistRawDetails(id).map(data -> {
+                    String format = data.path("format").asText();
+                    return "MOVIE".equals(format) || (List.of("ONA", "OVA", "SPECIAL").contains(format)
+                            && data.path("episodes").asInt() == 1 && data.path("duration").asInt() >= 45);
+                }).orElse(false);
+                Optional<MediaItemDto> mapped = getMediaDetails("tmdb-" + (feature ? "movie-" : "tv-") + tmdbId.get());
+                if (mapped.isPresent()) return mapped;
+            }
+        }
+        item.ifPresent(dto -> dto.setAnilistId(id));
+        return item;
+    }
+
     public List<EpisodeDto> getSeasonEpisodes(String slug, int seasonNumber) {
+        if (!slug.matches("tmdb-tv-\\d+") || seasonNumber < 0) return List.of();
         String[] parts = slug.split("-");
         if (!parts[0].equalsIgnoreCase("tmdb") || parts.length < 3) return List.of();
 
@@ -200,6 +240,60 @@ public class MediaService {
             log.warn("Invalid tvId in slug {}: {}", slug, e.getMessage());
             return List.of();
         }
+    }
+
+    public Object getChapterFeed(String slug, int offset) {
+        return mangaDexClient.getChapterFeed(mangaDexId(slug), offset);
+    }
+
+    public Object getChapterMetadata(String slug) {
+        return mangaDexClient.getChapterMetadata(mangaDexId(slug));
+    }
+
+    private String mangaDexId(String slug) {
+        if (!slug.startsWith("mangadex-manga-")) throw new IllegalArgumentException("Expected a MangaDex manga slug");
+        String id = slug.substring("mangadex-manga-".length());
+        UUID.fromString(id);
+        return id;
+    }
+
+    public Map<String, List<MediaCreditDto>> getEpisodeCredits(String slug, int season, int episode) {
+        if (!slug.matches("tmdb-tv-\\d+") || season < 0 || episode < 1) return Map.of("cast", List.of(), "crew", List.of());
+        int tvId = Integer.parseInt(slug.substring("tmdb-tv-".length()));
+        Optional<EpisodeDto> target = getSeasonEpisodes(slug, season).stream()
+                .filter(ep -> Objects.equals(ep.getEpisodeNumber(), episode)).findFirst();
+        if (target.isEmpty()) return Map.of("cast", List.of(), "crew", List.of());
+        if (Boolean.TRUE.equals(target.get().getIsFinaleSpecial())) {
+            Optional<EpisodeDto> original = tmdbClient.getSeasonEpisodes(tvId, 0).stream()
+                    .filter(ep -> Objects.equals(ep.getId(), target.get().getId())).findFirst();
+            if (original.isEmpty()) return Map.of("cast", List.of(), "crew", List.of());
+            return tmdbClient.getEpisodeCredits(tvId, 0, original.get().getEpisodeNumber());
+        }
+        return tmdbClient.getEpisodeCredits(tvId, season, episode);
+    }
+
+    public AnimeThemeDto getSeasonThemes(String slug, int season) {
+        Optional<MediaItemDto> media = getMediaDetails(slug);
+        if (media.isEmpty() || media.get().getThemeData() == null) return new AnimeThemeDto();
+        AnimeThemeDto themes = objectMapper.convertValue(media.get().getThemeData(), AnimeThemeDto.class);
+        for (AnimeThemeDto.AnimeThemeGroup group : themes.getGroups()) {
+            String name = group.getSeasonName().toLowerCase(Locale.ROOT);
+            if (Objects.equals(group.getSeasonNumber(), season)
+                    || (season == 0 && (name.contains("special") || name.contains("ova")))) {
+                return new AnimeThemeDto(group.getOpenings(), group.getEndings());
+            }
+        }
+        String label = "";
+        for (var summary : objectMapper.valueToTree(media.get().getSeasons())) {
+            if (summary.path("season_number").asInt(-1) == season) label = summary.path("name").asText("").toLowerCase(Locale.ROOT);
+        }
+        if (!label.isBlank()) {
+            for (var group : themes.getGroups()) {
+                String name = group.getSeasonName().toLowerCase(Locale.ROOT);
+                if (name.contains(label) || label.contains(name)) return new AnimeThemeDto(group.getOpenings(), group.getEndings());
+            }
+        }
+        return themes;
     }
 
     private Integer parseYear(String dateStr) {

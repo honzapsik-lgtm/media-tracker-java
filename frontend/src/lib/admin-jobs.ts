@@ -25,72 +25,64 @@ export const parsePositiveInt = (value: string | null | undefined, fallback: num
 };
 
 export async function getPaginatedJobs(filters: JobFilters) {
-  const page = Math.max(1, filters.page ?? 1);
-  const pageSize = Math.min(Math.max(1, filters.pageSize ?? ADMIN_DEFAULT_PAGE_SIZE), ADMIN_MAX_PAGE_SIZE);
-
-  try {
-    const q = new URLSearchParams();
-    if (filters.status) q.set("status", filters.status);
-    q.set("page", String(page));
-    q.set("limit", String(pageSize));
-
-    const data = await apiFetch<{ jobs: any[]; total: number }>(`/admin/jobs?${q.toString()}`);
-    const items = (data.jobs || []).map(serializeJob);
-    const total = data.total ?? items.length;
-
-    return {
-      items,
-      pagination: {
-        page,
-        pageSize,
-        total,
-        pageCount: Math.max(1, Math.ceil(total / pageSize)),
-      },
-    };
-  } catch (error) {
-    console.error("[getPaginatedJobs] Error fetching jobs from Spring Boot:", error);
-    return {
-      items: [],
-      pagination: {
-        page,
-        pageSize,
-        total: 0,
-        pageCount: 1,
-      },
-    };
+  const boundedInt = (value: number | undefined, fallback: number, max: number) =>
+    value !== undefined && Number.isFinite(value)
+      ? Math.min(max, Math.max(1, Math.trunc(value))) : fallback;
+  const pageSize = boundedInt(filters.pageSize, ADMIN_DEFAULT_PAGE_SIZE, ADMIN_MAX_PAGE_SIZE);
+  const page = boundedInt(filters.page, 1, Math.floor(2147483647 / pageSize) + 1);
+  const q = new URLSearchParams();
+  for (const key of ["status", "type", "dedupeKey", "userId", "q"] as const) {
+    const value = filters[key]?.trim();
+    if (value) q.set(key, value);
   }
+  q.set("page", String(page));
+  q.set("limit", String(pageSize));
+
+  const data = await apiFetch<{ jobs: any[]; total: number }>(`/admin/jobs?${q.toString()}`, { cache: "no-store" });
+  const items = data.jobs.map(serializeJob);
+  return {
+    items,
+    pagination: {
+      page,
+      pageSize,
+      total: data.total,
+      pageCount: Math.max(1, Math.ceil(data.total / pageSize)),
+    },
+  };
 }
 
-export async function getJobSummary() {
-  try {
-    const [pendingRes, processingRes, failedRes] = await Promise.allSettled([
-      apiFetch<{ jobs: any[]; total: number }>("/admin/jobs?status=pending&limit=1"),
-      apiFetch<{ jobs: any[]; total: number }>("/admin/jobs?status=processing&limit=1"),
-      apiFetch<{ jobs: any[]; total: number }>("/admin/jobs?status=failed&limit=1"),
-    ]);
+export type JobSummary = {
+  pending: number;
+  processing: number;
+  failed: number;
+  completedLastHour: number;
+  oldestPendingAgeSeconds: number | null;
+  stuckProcessing: number;
+};
 
-    const pending = pendingRes.status === "fulfilled" ? pendingRes.value.total ?? 0 : 0;
-    const processing = processingRes.status === "fulfilled" ? processingRes.value.total ?? 0 : 0;
-    const failed = failedRes.status === "fulfilled" ? failedRes.value.total ?? 0 : 0;
+export async function getJobSummary(): Promise<JobSummary> {
+  return apiFetch<JobSummary>("/admin/jobs/summary", { cache: "no-store" });
+}
 
-    return {
-      pending,
-      processing,
-      failed,
-      completedLastHour: 0,
-      oldestPendingAgeSeconds: null,
-      stuckProcessing: 0,
-    };
-  } catch {
-    return {
-      pending: 0,
-      processing: 0,
-      failed: 0,
-      completedLastHour: 0,
-      oldestPendingAgeSeconds: null,
-      stuckProcessing: 0,
-    };
+export type WorkerBatchResult = {
+  ok: boolean;
+  workerId: string;
+  processed: number;
+  completed: number;
+  retried: number;
+  failed: number;
+};
+
+export async function processWorkerBatch(options?: { requestId?: string; batchSize?: number }) {
+  const batchSize = options?.batchSize ?? 10;
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) {
+    throw new Error("batchSize must be between 1 and 100");
   }
+  return apiFetch<WorkerBatchResult>(`/admin/jobs/process?batchSize=${batchSize}`, {
+    method: "POST",
+    headers: options?.requestId ? { "X-Request-Id": options.requestId } : undefined,
+    cache: "no-store",
+  });
 }
 
 export function serializeJob(job: any) {

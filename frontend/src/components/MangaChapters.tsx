@@ -91,14 +91,14 @@ export default function MangaChapters({
         if (mangadexId) {
           if (!resolvedTotalChapters || !resolvedTotalVolumes) {
             try {
-              const mdRes = await fetch(`https://api.mangadex.org/manga/${mangadexId}`);
+              const mdRes = await fetch(`/api/media/mangadex-manga-${encodeURIComponent(mangadexId)}`);
               if (mdRes.ok) {
                 const mdData = await mdRes.json();
-                const lastCh = parseFloat(mdData.data?.attributes?.lastChapter);
+                const lastCh = parseFloat(mdData.chapters);
                 if (!isNaN(lastCh) && lastCh > 0 && (!resolvedTotalChapters || lastCh > resolvedTotalChapters)) {
                   resolvedTotalChapters = lastCh;
                 }
-                const lastVol = parseFloat(mdData.data?.attributes?.lastVolume);
+                const lastVol = parseFloat(mdData.volumes);
                 if (!isNaN(lastVol) && lastVol > 0 && !resolvedTotalVolumes) {
                   resolvedTotalVolumes = lastVol;
                 }
@@ -114,7 +114,7 @@ export default function MangaChapters({
           const limit = 500;
 
           while (hasMore && isMounted) {
-            const url = `https://api.mangadex.org/manga/${mangadexId}/feed?translatedLanguage[]=en&limit=${limit}&offset=${offset}&order[volume]=asc&order[chapter]=asc`;
+            const url = `/api/media/mangadex-manga-${encodeURIComponent(mangadexId)}/chapters?offset=${offset}`;
             const res = await fetch(url);
             if (!res.ok) {
               throw new Error(`Failed to fetch chapters: Status ${res.status}`);

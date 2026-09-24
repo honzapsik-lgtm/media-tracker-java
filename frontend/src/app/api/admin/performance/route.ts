@@ -38,7 +38,6 @@ export async function GET(request: Request) {
       event: error instanceof AdminAuthError ? "admin.performance.denied" : "admin.performance.failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

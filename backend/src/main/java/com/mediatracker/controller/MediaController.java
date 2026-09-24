@@ -81,4 +81,24 @@ public class MediaController {
         List<EpisodeDto> episodes = mediaService.getSeasonEpisodes(slug, seasonNumber);
         return ResponseEntity.ok(episodes);
     }
+
+    @GetMapping("/{slug}/season/{seasonNumber}/themes")
+    public Object getSeasonThemes(@PathVariable String slug, @PathVariable int seasonNumber) {
+        return mediaService.getSeasonThemes(slug, seasonNumber);
+    }
+
+    @GetMapping("/{slug}/season/{seasonNumber}/episode/{episodeNumber}/credits")
+    public Object getEpisodeCredits(@PathVariable String slug, @PathVariable int seasonNumber, @PathVariable int episodeNumber) {
+        return mediaService.getEpisodeCredits(slug, seasonNumber, episodeNumber);
+    }
+
+    @GetMapping("/{slug}/chapters")
+    public Object getChapters(@PathVariable String slug, @RequestParam(defaultValue = "0") int offset) {
+        return mediaService.getChapterFeed(slug, offset);
+    }
+
+    @GetMapping("/{slug}/chapter-metadata")
+    public Object getChapterMetadata(@PathVariable String slug) {
+        return mediaService.getChapterMetadata(slug);
+    }
 }

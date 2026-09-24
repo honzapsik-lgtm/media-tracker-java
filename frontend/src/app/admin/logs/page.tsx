@@ -1,3 +1,4 @@
+import { getDiagnosticLogs } from "@/lib/admin-diagnostics";
 import Link from "next/link";
 import { AdminNav } from "@/app/admin/admin-nav";
 import { AdminBadge } from "@/components/admin/AdminBadge";
@@ -12,35 +13,6 @@ const parsePositiveInt = (value: string | undefined, fallback: number) => {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
-
-function buildWhere(params: Record<string, string | undefined>): Record<string, any> {
-  const level = params.level?.trim();
-  const event = params.event?.trim();
-  const requestId = params.requestId?.trim();
-  const userId = params.userId?.trim();
-  const mediaId = params.mediaId?.trim();
-  const jobId = params.jobId?.trim();
-  const q = params.q?.trim();
-
-  return {
-    ...(level ? { level } : {}),
-    ...(event ? { event: { contains: event } } : {}),
-    ...(requestId ? { requestId } : {}),
-    ...(userId ? { userId } : {}),
-    ...(mediaId ? { mediaId } : {}),
-    ...(jobId ? { jobId } : {}),
-    ...(q
-      ? {
-          OR: [
-            { event: { contains: q } },
-            { message: { contains: q } },
-            { errorName: { contains: q } },
-            { errorMessage: { contains: q } },
-          ],
-        }
-      : {}),
-  };
-}
 
 function pageHref(params: Record<string, string | undefined>, page: number) {
   const search = new URLSearchParams();
@@ -70,7 +42,6 @@ export default async function AdminLogsPage({
       event: "admin.logs.page.denied",
       requestId,
       error,
-      persist: true,
     });
   }
 
@@ -91,10 +62,9 @@ export default async function AdminLogsPage({
   const page = parsePositiveInt(params.page, 1);
   const pageSize = Math.min(parsePositiveInt(params.pageSize, ADMIN_DEFAULT_PAGE_SIZE), ADMIN_MAX_PAGE_SIZE);
   const lastRefreshed = new Date();
-  const where = buildWhere(params);
-
-  const logs: any[] = [];
-  const total = 0;
+  const result = await getDiagnosticLogs({ ...params, page, pageSize });
+  const logs = result.items;
+  const total = result.pagination.total;
 
   await appLog({
     level: "info",
@@ -172,14 +142,14 @@ export default async function AdminLogsPage({
 
                   return (
                   <tr key={log.id} className="border-b border-gray-900 align-top">
-                    <td className="px-4 py-3 text-gray-400">{log.createdAt.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-gray-400">{new Date(log.createdAt).toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <AdminBadge value={log.level} />
                     </td>
                     <td className="px-4 py-3 font-bold text-gray-200">{log.event}</td>
                     <td className="max-w-sm px-4 py-3 text-gray-300">
                       <div>{log.message ?? "-"}</div>
-                      {(log.errorName || log.errorMessage || metadata) && (
+                      {(log.errorName || log.errorMessage || metadata != null) && (
                         <div className="mt-2 rounded bg-gray-900 p-2 text-xs text-gray-500">
                           {log.errorName && <div>{log.errorName}: {log.errorMessage}</div>}
                           {metadata != null && <pre className="mt-1 whitespace-pre-wrap">{JSON.stringify(metadata, null, 2)}</pre>}

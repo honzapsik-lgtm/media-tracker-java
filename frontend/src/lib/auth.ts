@@ -2,119 +2,68 @@ import type { NextAuthOptions } from "next-auth";
 import DiscordProvider from "next-auth/providers/discord";
 import GoogleProvider from "next-auth/providers/google";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-const GATEWAY_SECRET = process.env.INTERNAL_GATEWAY_SECRET || "default-internal-secret-change-in-prod-123456";
+const API_BASE_URL = process.env.BACKEND_API_URL || "http://localhost:8080/api";
+const GATEWAY_SECRET = process.env.INTERNAL_GATEWAY_SECRET || "";
 
-const isUUID = (str: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+type BackendUser = {
+  id: string;
+  username: string | null;
+  role: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+};
 
 export const authOptions: NextAuthOptions = {
-  session: {
-    strategy: "jwt",
-  },
+  session: { strategy: "jwt" },
   providers: [
-    DiscordProvider({
-      clientId: process.env.DISCORD_CLIENT_ID!,
-      clientSecret: process.env.DISCORD_CLIENT_SECRET!,
-    }),
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
+    ...(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET ? [DiscordProvider({
+      clientId: process.env.DISCORD_CLIENT_ID,
+      clientSecret: process.env.DISCORD_CLIENT_SECRET,
+    })] : []),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET ? [GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    })] : []),
   ],
   callbacks: {
-    async jwt({ token, user, account, trigger, session }) {
-      // 1. Initial OAuth callback
+    async jwt({ token, user, account }) {
+      let dbUser: BackendUser | null = null;
       if (account && user) {
+        const response = await fetch(`${API_BASE_URL}/auth/oauth-sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Internal-Gateway-Key": GATEWAY_SECRET },
+          body: JSON.stringify({
+            provider: account.provider,
+            providerAccountId: account.providerAccountId,
+            email: user.email || null,
+            name: user.name || null,
+            image: user.image || null,
+          }),
+        });
+        if (!response.ok) throw new Error("Unable to synchronize OAuth account with the backend");
+        dbUser = await response.json();
+      } else if (token.id) {
         try {
-          const res = await fetch(`${API_BASE_URL}/auth/oauth-sync`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Internal-Gateway-Key": GATEWAY_SECRET,
-            },
-            body: JSON.stringify({
-              provider: account.provider,
-              providerAccountId: account.providerAccountId,
-              email: user.email || null,
-              name: user.name || null,
-              image: user.image || null,
-            }),
+          const response = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: { "X-Internal-Gateway-Key": GATEWAY_SECRET, "X-User-Id": String(token.id) },
+            cache: "no-store",
           });
-          if (res.ok) {
-            const dbUser = await res.json();
-            token.id = dbUser.id;
-            token.username = dbUser.username || null;
-            token.role = dbUser.role || "user";
-            token.name = dbUser.name || user.name;
-            token.email = dbUser.email || user.email;
-            token.picture = dbUser.image || user.image;
-          } else {
-            console.error("[NextAuth] Failed to sync oauth user, status:", res.status);
-            token.id = user.id;
-          }
-        } catch (err) {
-          console.error("[NextAuth] Error syncing oauth user with backend:", err);
-          token.id = user.id;
-        }
-      }
-
-      // 2. Client-triggered session update (e.g. after username set)
-      if (trigger === "update" && session?.username) {
-        token.username = session.username;
-      }
-
-      // 3. Session self-healing and role sync: if token.id is not a UUID or username/role need refresh
-      if (token.id && (!token.username || !isUUID(String(token.id)))) {
-        try {
-          const res = await fetch(`${API_BASE_URL}/auth/oauth-sync`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Internal-Gateway-Key": GATEWAY_SECRET,
-            },
-            body: JSON.stringify({
-              provider: "discord",
-              providerAccountId: String(token.id),
-              email: (token.email as string) || null,
-              name: (token.name as string) || null,
-              image: (token.picture as string) || null,
-            }),
-          });
-          if (res.ok) {
-            const dbUser = await res.json();
-            token.id = dbUser.id;
-            token.username = dbUser.username || null;
-            token.role = dbUser.role || "user";
-            token.name = dbUser.name || token.name;
-            token.email = dbUser.email || token.email;
-            token.picture = dbUser.image || token.picture;
-          }
+          if (response.ok) dbUser = await response.json();
+          else token.role = "user";
         } catch {
-          // ignore background fetch error
-        }
-      } else if (token.id && (token.role !== "admin" || trigger === "update")) {
-        // Query backend to pick up newly assigned admin roles without forcing user logout
-        try {
-          const res = await fetch(`${API_BASE_URL}/auth/me`, {
-            headers: {
-              "X-Internal-Gateway-Key": GATEWAY_SECRET,
-              "X-User-Id": String(token.id),
-            },
-          });
-          if (res.ok) {
-            const me = await res.json();
-            if (me.role) token.role = me.role;
-            if (me.username) token.username = me.username;
-            if (me.name) token.name = me.name;
-            if (me.email) token.email = me.email;
-            if (me.image) token.picture = me.image;
-          }
-        } catch {
-          // ignore background fetch error
+          // Keep the session through temporary outages; Java authorizes every request.
+          token.role = "user";
         }
       }
-
+      if (dbUser) {
+        token.id = dbUser.id;
+        token.username = dbUser.username;
+        token.role = dbUser.role;
+        token.name = dbUser.name;
+        token.email = dbUser.email;
+        token.picture = dbUser.image;
+      }
       return token;
     },
     async session({ session, token }) {
@@ -122,9 +71,9 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
         session.user.username = token.username as string | null;
-        if (token.picture) session.user.image = token.picture as string;
-        if (token.name) session.user.name = token.name as string;
-        if (token.email) session.user.email = token.email as string;
+        session.user.image = token.picture;
+        session.user.name = token.name;
+        session.user.email = token.email;
       }
       return session;
     },

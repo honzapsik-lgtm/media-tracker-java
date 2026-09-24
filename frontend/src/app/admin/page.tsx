@@ -29,7 +29,6 @@ export default async function AdminPage() {
       event: "admin.page.denied",
       requestId,
       error,
-      persist: true,
     });
   }
 
@@ -143,8 +142,6 @@ export default async function AdminPage() {
             <h2 className="mb-4 font-black text-gray-100">Global Rankings</h2>
             <p className="mb-4 text-sm text-gray-400">
               Trigger the iterative Rank Aggregation engine to calculate the global leaderboards based on custom lists.
-              <br />
-              <span className="mt-2 block text-xs text-purple-300 font-bold">// TODO: Set this to run automatically daily instead of manual trigger.</span>
             </p>
             <form action="/api/admin/ranking" method="post">
               <button className="rounded border border-purple-500/40 px-4 py-2 text-sm font-bold text-purple-300 hover:bg-purple-900/40 hover:text-purple-100">

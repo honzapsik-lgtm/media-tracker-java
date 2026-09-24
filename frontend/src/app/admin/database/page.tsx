@@ -23,7 +23,6 @@ export default async function AdminDatabasePage() {
       event: "admin.database.page.denied",
       requestId,
       error,
-      persist: true,
     });
   }
 

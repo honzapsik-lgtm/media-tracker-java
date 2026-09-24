@@ -18,7 +18,6 @@ export async function POST(request: Request) {
       requestId,
       userId: admin.id,
       metadata: { deletedCount: data.deleted },
-      persist: true,
     });
 
     revalidatePath("/admin/cache");
@@ -29,7 +28,6 @@ export async function POST(request: Request) {
       event: error instanceof AdminAuthError ? "admin.cache.flush_all_denied" : "admin.cache.flush_all_failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

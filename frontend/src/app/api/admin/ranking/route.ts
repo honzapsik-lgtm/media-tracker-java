@@ -16,7 +16,6 @@ export async function POST(request: Request) {
       event: "admin.ranking.process_requested",
       requestId,
       userId: admin.id,
-      persist: true,
     });
     
     // Call Spring Boot backend to calculate PageRank aggregation across all media types
@@ -32,7 +31,6 @@ export async function POST(request: Request) {
       event: "admin.ranking.process_failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

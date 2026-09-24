@@ -40,7 +40,6 @@ export async function GET(request: Request) {
       event: error instanceof AdminAuthError ? "admin.jobs.denied" : "admin.jobs.failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

@@ -60,7 +60,7 @@ export default function MangaMetadataPills({
 
     async function fetchMetadata() {
       try {
-        const res = await fetch(`https://api.mangadex.org/manga/${mangadexId}/aggregate`);
+        const res = await fetch(`/api/media/mangadex-manga-${encodeURIComponent(mangadexId!)}/chapter-metadata`);
         if (!res.ok) return;
         const json = await res.json();
         if (!json.volumes) return;

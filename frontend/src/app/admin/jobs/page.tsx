@@ -37,7 +37,6 @@ export default async function AdminJobsPage({
       event: "admin.jobs.page.denied",
       requestId,
       error,
-      persist: true,
     });
   }
 

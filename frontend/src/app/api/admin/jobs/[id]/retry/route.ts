@@ -19,7 +19,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       userId: admin.id,
       jobId: id,
       metadata: result,
-      persist: true,
     });
     return NextResponse.json({ ok: true, jobId: id });
   } catch (error) {
@@ -29,7 +28,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       requestId,
       jobId: id,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

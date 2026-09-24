@@ -90,8 +90,8 @@ public class JobQueueManager {
     }
 
     @Transactional
-    public void failJob(String jobId, String errorMessage) {
-        backgroundJobRepository.findById(jobId).ifPresent(job -> {
+    public boolean failJob(String jobId, String errorMessage) {
+        return backgroundJobRepository.findById(jobId).map(job -> {
             boolean shouldRetry = job.getAttempts() < job.getMaxAttempts();
             job.setLockedAt(null);
             job.setLockedBy(null);
@@ -109,7 +109,25 @@ public class JobQueueManager {
                 log.error("Job {} permanently failed after {} attempts: {}", jobId, job.getAttempts(), errorMessage);
             }
             backgroundJobRepository.save(job);
-        });
+            return shouldRetry;
+        }).orElseThrow(() -> new IllegalStateException("Claimed job no longer exists: " + jobId));
+    }
+
+    public record JobSummary(long pending, long processing, long failed, long completedLastHour,
+                             Long oldestPendingAgeSeconds, long stuckProcessing) {}
+
+    @Transactional(readOnly = true)
+    public JobSummary getSummary() {
+        LocalDateTime now = LocalDateTime.now();
+        Long oldestAge = backgroundJobRepository.findFirstByStatusOrderByCreatedAtAsc("pending")
+                .map(job -> Math.max(0L, java.time.Duration.between(job.getCreatedAt(), now).getSeconds()))
+                .orElse(null);
+        return new JobSummary(backgroundJobRepository.countByStatus("pending"),
+                backgroundJobRepository.countByStatus("processing"),
+                backgroundJobRepository.countByStatus("failed"),
+                backgroundJobRepository.countByStatusAndProcessedAtAfter("completed", now.minusHours(1)),
+                oldestAge,
+                backgroundJobRepository.countByStatusAndLockedAtBefore("processing", now.minusMinutes(15)));
     }
 
     @Transactional

@@ -18,7 +18,6 @@ export async function GET(request: Request) {
       requestId,
       userId: admin.id,
       metadata: { count: checks.length },
-      persist: true,
     });
 
     return NextResponse.json({ items: checks });
@@ -28,7 +27,6 @@ export async function GET(request: Request) {
       event: error instanceof AdminAuthError ? "admin.database.checks.denied" : "admin.database.checks.failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

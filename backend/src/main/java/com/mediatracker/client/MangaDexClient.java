@@ -56,6 +56,31 @@ public class MangaDexClient {
         return Optional.empty();
     }
 
+    public JsonNode getChapterFeed(String id, int offset) {
+        UUID.fromString(id);
+        if (offset < 0 || offset > 9500 || offset % 500 != 0) {
+            throw new IllegalArgumentException("Invalid chapter offset");
+        }
+        return chapterResource(id, "feed?translatedLanguage[]=en&limit=500&offset=" + offset
+                + "&order[volume]=asc&order[chapter]=asc");
+    }
+
+    public JsonNode getChapterMetadata(String id) {
+        UUID.fromString(id);
+        return chapterResource(id, "aggregate");
+    }
+
+    private JsonNode chapterResource(String id, String resource) {
+        String key = "mangadex-chapters-" + id + "-" + resource;
+        Optional<JsonNode> cached = cacheService.get(key, JsonNode.class);
+        if (cached.isPresent()) return cached.get();
+        JsonNode data = restClient.get().uri(BASE_URL + "/manga/" + id + "/" + resource)
+                .retrieve().body(JsonNode.class);
+        if (data == null) throw new IllegalStateException("Empty MangaDex chapter response");
+        cacheService.put(key, "mangadex", data, 3600);
+        return data;
+    }
+
     public List<MediaItemDto> searchManga(String query) {
         if (query == null || query.isBlank()) return List.of();
         String normalizedQuery = query.trim();
@@ -136,7 +161,7 @@ public class MangaDexClient {
 
     public Optional<MediaItemDto> getMangaDetails(String mangadexId) {
         if (mangadexId == null || mangadexId.isBlank()) return Optional.empty();
-        String cacheKey = "mangadex-details-" + mangadexId;
+        String cacheKey = "mangadex-details-v2-" + mangadexId;
 
         Optional<MediaItemDto> cached = cacheService.get(cacheKey, MediaItemDto.class);
         if (cached.isPresent()) return cached;
@@ -229,6 +254,7 @@ public class MangaDexClient {
             dto.setKeywords(new ArrayList<>(keywordSet));
             dto.setCredits(staff);
             dto.setOrigin("MANGADEX");
+            dto.setAnilistId(parseIntOrNull(attributes.path("links").path("al").asText("")));
 
             cacheService.put(cacheKey, "mangadex", dto, CACHE_TTL_SECONDS);
             return Optional.of(dto);

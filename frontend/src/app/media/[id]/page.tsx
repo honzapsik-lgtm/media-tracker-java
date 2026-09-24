@@ -1,6 +1,4 @@
 import ExpandableCast from "@/components/ExpandableCast";
-import { getTMDbDetails, cleanStudioData } from "@/lib/tmdb";
-import { getGameDetails, getGameCrew, getRAWGGameDetails, resolveRAWGToIGDB } from "@/lib/games";
 
 import RatingSlider from "@/components/RatingSlider";
 import FriendsRatingSection from "@/components/FriendsRatingSection";
@@ -10,20 +8,17 @@ import { notFound, redirect } from "next/navigation";
 import ExpandableText from "@/components/ExpandableText";
 import WatchlistButton from "@/components/WatchlistButton";
 import WatchlistProgressTracker from "@/components/WatchlistProgressTracker";
-import SyncLoader from "@/components/SyncLoader";
 import ExpandableAniListCast from "@/components/ExpandableAniListCast";
 import { StaffGrid } from '@/components/StaffGrid';
 import WatchProviders from "@/components/WatchProviders";
 import AnimeThemes from "@/components/AnimeThemes";
 import BackToSearchButton from "@/components/BackToSearchButton";
 import { CRITERIA_CONFIG } from "@/lib/constants";
-import { getMasterCrew, getMasterStudios, getMasterCast } from "@/lib/credits-parser";
-import { getAnilistDetails } from "@/lib/anilist";
 
 import GameCharacterGrid from "@/components/GameCharacterGrid";
 import MangaChapters from "@/components/MangaChapters";
-import MangaChaptersLoader from "@/components/MangaChaptersLoader";
 import MangaMetadataPills from "@/components/MangaMetadataPills";
+import { getMediaPageDetails, cleanStudioData, getMediaRankings } from "@/lib/media-api";
 import { getRatings } from "@/lib/api-client";
 
 
@@ -78,16 +73,6 @@ function getStoreIcon(site: string) {
 
 interface TmdbSeasonSummary { id: number; name: string; season_number: number; episode_count: number; }
 
-function getKnownEpisodeCount(node: any, episodeData?: unknown): number | "Unknown" {
-  if (typeof node?.episodes === "number" && node.episodes > 0) return node.episodes;
-  if (typeof node?.nextAiringEpisode?.episode === "number" && node.nextAiringEpisode.episode > 1) {
-    return node.nextAiringEpisode.episode - 1;
-  }
-  if (Array.isArray(episodeData) && episodeData.length > 0) return episodeData.length;
-  if (Array.isArray(node?.streamingEpisodes) && node.streamingEpisodes.length > 0) return node.streamingEpisodes.length;
-  return "Unknown";
-}
-
 export default async function MediaDetailsPage({ params }: { params: Promise<{ id: string }>; }) {
   const resolvedParams = await params;
   let mediaId = resolvedParams.id;
@@ -113,178 +98,19 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
   if (parts[0] === 'mangadex' && parts[1] !== 'manga') {
     redirect(`/media/mangadex-manga-${parts.slice(1).join('-')}`);
   }
-  if (parts[0] === 'anilist' && parts[1] !== 'manga') {
-    redirect(`/media/anilist-manga-${parts.slice(1).join('-')}`);
-  }
   if (parts[0] === 'manga') {
     redirect(`/media/jikan-manga-${parts.slice(1).join('-')}`);
   }
 
   const provider = parts[0]; 
   
-  let mediaDetails: any = null;
-  let rawData: any = null;
+  const mediaDetails = await getMediaPageDetails(mediaId);
+  if (!mediaDetails) return notFound();
+  if (mediaDetails.id !== mediaId) redirect(`/media/${mediaDetails.id}`);
   let primaryStaff: any[] = [];
   let secondaryStaff: any[] = [];
-  let relatedManga: { id: number | string; title: string; image: string | null } | null = null;
-  let animeThemes: any = null;
-  
-  if (provider === 'tmdb') {
-    const tmdbType = parts[1] as 'movie' | 'tv'; 
-    const externalId = parts[2];
-    mediaDetails = await getTMDbDetails(externalId, tmdbType);
-    if (mediaDetails) {
-      const isAnime = (mediaDetails.originalLanguage === 'ja') && mediaDetails.genres?.includes('Animation');
-      if (isAnime) {
-        const { searchRelatedManga } = await import('@/lib/anilist');
-        const { fetchAnimeThemesForMedia } = await import('@/lib/jikan');
-
-        const [manga, themes] = await Promise.all([
-          searchRelatedManga(mediaDetails.title).catch(() => null),
-          fetchAnimeThemesForMedia(mediaDetails.title, mediaDetails.originalTitle, tmdbType || mediaDetails.type, mediaDetails.seasons).catch(() => null),
-        ]);
-        relatedManga = manga;
-        animeThemes = themes;
-      }
-    }
-  } else if (provider === 'igdb' || provider === 'rawg') {
-    const rawGameId = parts.length > 2 ? parts[2] : parts[1];
-    if (provider === 'igdb') {
-      mediaDetails = await getGameDetails(rawGameId);
-    } else {
-      const rawgId = parseInt(rawGameId, 10);
-      const resolvedIgdbId = await resolveRAWGToIGDB(rawgId);
-      if (resolvedIgdbId) {
-        redirect(`/media/igdb-game-${resolvedIgdbId}`);
-      }
-      mediaDetails = await getRAWGGameDetails(rawgId);
-    }
-    if (mediaDetails) {
-      let releaseYear: number | undefined;
-      if (mediaDetails.releaseDate && mediaDetails.releaseDate !== 'N/A') {
-        const parsedYear = parseInt(mediaDetails.releaseDate.split('-')[0], 10);
-        if (!isNaN(parsedYear)) {
-          releaseYear = parsedYear;
-        }
-      }
-      const rawgCrew = await getGameCrew(mediaDetails.title, releaseYear);
-      const mappedRawgCrew = rawgCrew.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        role: c.role,
-        image: c.imageUrl,
-        isCompany: false
-      }));
-      primaryStaff = mappedRawgCrew.filter((c: any) =>
-        ['director', 'writer', 'composer'].some(role =>
-          c.role.toLowerCase().includes(role)
-        )
-      );
-      secondaryStaff = mappedRawgCrew.filter((c: any) =>
-        ['design'].some(role =>
-          c.role.toLowerCase().includes(role)
-        )
-      );
-    }
-  } else if (provider === 'mangadex') {
-    const mangadexId = parts.slice(2).join('-');
-    const { getMangaDexDetails } = await import('@/lib/mangadex');
-    const mdDetails = await getMangaDexDetails(mangadexId);
-    if (!mdDetails) return notFound();
-
-    let anilistData: any = null;
-    if (mdDetails.anilistId) {
-      anilistData = await getAnilistDetails(mdDetails.anilistId).catch(() => null);
-    }
-
-    mediaDetails = {
-      id: mediaId,
-      title: mdDetails.title || anilistData?.title?.english || anilistData?.title?.romaji || "Unknown Title",
-      type: 'manga',
-      image: mdDetails.image || anilistData?.coverImage?.extraLarge || anilistData?.coverImage?.large || null,
-      backdrop: anilistData?.bannerImage || null,
-      description: mdDetails.description || anilistData?.description || "",
-      releaseDate: mdDetails.releaseDate || (anilistData?.startDate?.year ? `${anilistData.startDate.year}-${String(anilistData.startDate.month || 1).padStart(2, '0')}-${String(anilistData.startDate.day || 1).padStart(2, '0')}` : null),
-      globalScore: anilistData?.averageScore || 0,
-      runtime: anilistData?.duration || null,
-      genres: mdDetails.genres || [],
-      keywords: mdDetails.keywords || [],
-      trailerUrl: anilistData?.trailer?.site === "youtube" ? `https://www.youtube.com/embed/${anilistData.trailer.id}` : null,
-      streamingLinks: [],
-      cast: [],
-      seasons: null,
-      credits: mdDetails.staff || [],
-      castData: [],
-      chapters: mdDetails.chapters || anilistData?.chapters || null,
-      volumes: mdDetails.volumes || anilistData?.volumes || null,
-      status: mdDetails.status || anilistData?.status || null,
-      mangadexId: mangadexId,
-    };
-  } else if (provider === 'jikan') {
-    const malId = parseInt(parts[2], 10);
-    const { getMangaDexByMalId } = await import('@/lib/mangadex');
-    const mdDetails = await getMangaDexByMalId(malId);
-    if (mdDetails?.id) {
-      redirect(`/media/mangadex-manga-${mdDetails.id}`);
-    }
-    return notFound();
-  } else if (provider === 'anilist') {
-    const extractedId = parseInt(parts.length > 2 ? parts[2] : parts[1], 10);
-    rawData = await getAnilistDetails(extractedId).catch(() => null);
-    if (!rawData) {
-      const { getMangaDexByAniListId } = await import('@/lib/mangadex');
-      const mdDetails = await getMangaDexByAniListId(extractedId);
-      if (mdDetails?.id) {
-        redirect(`/media/mangadex-manga-${mdDetails.id}`);
-      }
-      return notFound();
-    }
-    
-    const { resolveAniListType } = await import('@/lib/anilist');
-    const structuralType = resolveAniListType(rawData.format || '', rawData.episodes, rawData.duration);
-    if (structuralType !== 'MANGA') {
-      const { getMapping } = await import('@/lib/mal-sync');
-      const mapping = await getMapping(extractedId);
-      if (mapping?.tmdbId) {
-        const routeType = structuralType === 'FEATURE' ? 'movie' : 'tv';
-        redirect(`/media/tmdb-${routeType}-${mapping.tmdbId}`);
-      }
-    }
-
-    const { getMangaDexByAniListId } = await import('@/lib/mangadex');
-    const mdDetails = await getMangaDexByAniListId(extractedId);
-    if (mdDetails?.id) {
-      redirect(`/media/mangadex-manga-${mdDetails.id}`);
-    }
-
-    mediaDetails = {
-      id: mediaId,
-      title: rawData?.title?.english || rawData?.title?.romaji || "Unknown Title",
-      type: 'manga',
-      image: rawData?.coverImage?.extraLarge || rawData?.coverImage?.large || null,
-      backdrop: rawData?.bannerImage || null,
-      description: rawData?.description || "",
-      releaseDate: rawData?.startDate?.year ? `${rawData.startDate.year}-${String(rawData.startDate.month || 1).padStart(2, '0')}-${String(rawData.startDate.day || 1).padStart(2, '0')}` : null,
-      globalScore: rawData?.averageScore || 0,
-      runtime: rawData?.duration || null,
-      genres: rawData?.genres || [],
-      keywords: (rawData?.tags || []).filter((t: any) => !t.isMediaSpoiler).map((t: any) => t.name) || [],
-      trailerUrl: rawData?.trailer?.site === "youtube" ? `https://www.youtube.com/embed/${rawData.trailer.id}` : null,
-      streamingLinks: [],
-      cast: [],
-      seasons: null,
-      credits: [],
-      castData: [],
-      chapters: rawData?.chapters || null,
-      volumes: rawData?.volumes || null,
-      status: rawData?.status || null,
-      mangadexId: null,
-    };
-  } else {
-    return notFound();
-  }
-
-  if (!mediaDetails) return notFound();
+  const relatedManga = mediaDetails.relatedManga;
+  const animeThemes = mediaDetails.themeData;
 
   const PRIMARY_ROLES = [
     'Director', 'Writer', 'Creator', 'Original Creator', 'Series Composition', 'Developer',
@@ -292,9 +118,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
     'Composer', 'Music'
   ];
 
-  if (provider === 'rawg' || provider === 'igdb') {
-    // Already populated from getGameCrew
-  } else if (Array.isArray(mediaDetails.credits)) {
+  if (Array.isArray(mediaDetails.credits)) {
     primaryStaff = mediaDetails.credits.filter((c: any) => PRIMARY_ROLES.includes(c.role));
     secondaryStaff = mediaDetails.credits.filter((c: any) => !PRIMARY_ROLES.includes(c.role));
   } else {
@@ -312,7 +136,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
 
   let stats: { community_average: number; total_ratings: number } | null = null;
   let globalCriteriaAverages: Record<string, number> = {};
-  const placementRank: number | null = null;
+  let placementRank: number | null = null;
   let reviews: any[] = [];
 
   try {
@@ -324,21 +148,8 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
     // API offline or not rated yet
   }
 
-  const localDbMedia = mediaDetails.localDbMedia;
-
-  const franchiseRoot = localDbMedia?.relatedMedia || localDbMedia;
-  let anilistSeasonNodes: any[] = [];
-  if (franchiseRoot && franchiseRoot.anilistId) {
-    const rawSeasons = franchiseRoot.seasons || [];
-    const seasonAnilistIds = rawSeasons.map((s: any) => s.anilistId).filter(Boolean) as number[];
-    if (seasonAnilistIds.length > 0) {
-      const { fetchAnilistNodes } = await import('@/lib/anilist');
-      anilistSeasonNodes = await fetchAnilistNodes(seasonAnilistIds);
-    }
-  }
-
-  const seasonStatsMap: Record<string, number> = {};
-  const seasonRankMap: Record<string, number> = {};
+  let seasonStatsMap: Record<string, number> = {};
+  let seasonRankMap: Record<string, number> = {};
 
   const getPlatformName = (type: string) => {
     if (type === 'movie' || type === 'show') return 'TMDb Score';
@@ -350,100 +161,9 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
   const activeCriteriaConfig = CRITERIA_CONFIG[mediaTypeKey] || [];
 
   let timelineItems: any[] = [];
-  let spinoffItems: any[] = [];
-  const isSyncing = !!(franchiseRoot && franchiseRoot.anilistId && !franchiseRoot.franchiseSyncedAt);
-  const isCanonMovie = !!localDbMedia?.relatedMediaId && mediaTypeKey === "movie";
-  
-  if (franchiseRoot) {
-    if (mediaTypeKey === 'manga') {
-      const mangaNodes: any[] = [];
-      if (franchiseRoot.type === 'MANGA') {
-        mangaNodes.push(franchiseRoot);
-      }
-      const relatedSpinoffs = franchiseRoot.inverseRelated?.filter((m: any) => m.type === 'MANGA') || [];
-      mangaNodes.push(...relatedSpinoffs);
-      
-      const otherMangaNodes = mangaNodes.filter((m: any) => m.id !== localDbMedia.id);
-      
-      spinoffItems = otherMangaNodes.map((m: any) => {
-        const directRelation = rawData?.relations?.edges?.find((edge: any) => edge.node.id === m.anilistId);
-        
-        let label = "Related";
-        if (directRelation) {
-          const relType = directRelation.relationType;
-          if (relType === 'PREQUEL') label = "Prequel";
-          else if (relType === 'SEQUEL') label = "Sequel";
-          else if (relType === 'SPIN_OFF') label = "Spin-off";
-          else if (relType === 'SIDE_STORY') label = "Side Story";
-          else if (relType === 'ALTERNATIVE') label = "Alternative";
-          else if (relType === 'SUMMARY') label = "Summary";
-          else if (relType === 'PARENT') label = "Parent";
-          else label = relType.replace('_', ' ').toLowerCase();
-        } else if (m.id === franchiseRoot.id) {
-          label = "Parent";
-        }
-        
-        return {
-          ...m,
-          relationLabel: label
-        };
-      });
-    } else {
-      const rawSeasons = franchiseRoot.seasons || [];
-      const rawCanonMovies = franchiseRoot.inverseRelated?.filter((m: any) => m.isMainStoryline === true && m.type === 'MOVIE') || [];
-      
-      // For timeline parsing, we want the title of the franchise root
-      const timelineRootTitle = franchiseRoot.title || mediaDetails.title;
-      
-      timelineItems = [
-        {
-          id: franchiseRoot.id,
-          title: timelineRootTitle,
-          episode_count: getKnownEpisodeCount(rawData, franchiseRoot.episodeData),
-          _sortTime: franchiseRoot.releaseDate ? new Date(franchiseRoot.releaseDate).getTime() : 0,
-          link: `/media/${franchiseRoot.id}/season/${franchiseRoot.anilistId}`,
-          isMovie: false,
-          statId: `${franchiseRoot.id}-s${franchiseRoot.anilistId}`,
-        },
-        ...rawSeasons.map((s: any, idx: number) => {
-          let nodeTitle = `Season ${idx + 2}`;
-          let nodeEpisodes: number | string = 'Unknown';
-          
-          const fetchedNode = anilistSeasonNodes.find((n: any) => n.id === s.anilistId);
-          if (fetchedNode && (fetchedNode.title?.english || fetchedNode.title?.romaji)) {
-            nodeTitle = fetchedNode.title.english || fetchedNode.title.romaji;
-            nodeEpisodes = getKnownEpisodeCount(fetchedNode, s.episodeData);
-          } else if (Array.isArray(s.episodeData) && s.episodeData.length > 0) {
-            nodeEpisodes = s.episodeData.length;
-          }
-
-          return {
-            id: s.id,
-            title: nodeTitle,
-            episode_count: nodeEpisodes,
-            _sortTime: s.releaseDate ? new Date(s.releaseDate).getTime() : Infinity,
-            link: `/media/${franchiseRoot.id}/season/${s.anilistId || idx + 1}`,
-            isMovie: false,
-            statId: `${franchiseRoot.id}-s${s.anilistId || idx + 1}`,
-          };
-        }),
-        ...rawCanonMovies.map((m: any) => ({
-          id: m.id,
-          title: m.title || `Canon Movie`,
-          episode_count: 'Feature',
-          _sortTime: m.releaseDate ? new Date(m.releaseDate).getTime() : Infinity,
-          link: `/media/${m.id}`,
-          isMovie: true,
-          statId: m.id,
-        }))
-      ];
-
-      timelineItems.sort((a, b) => a._sortTime - b._sortTime);
-      spinoffItems = franchiseRoot.inverseRelated?.filter((m: any) => m.isMainStoryline === false) || [];
-    }
-  } else if (mediaDetails.type === "show" && mediaDetails.seasons) {
-    const { getAdjustedSeasons, getCanonMoviesForShow } = await import('@/lib/anime-canon');
-    const adjustedSeasons = getAdjustedSeasons(provider === 'tmdb' ? parts[2] : mediaId, mediaDetails.seasons);
+  let spinoffItems: any[] = [...(mediaDetails.relatedMedia || [])];
+  if (mediaDetails.type === "show" && mediaDetails.seasons) {
+    const adjustedSeasons: TmdbSeasonSummary[] = mediaDetails.seasons;
 
     const canonSeasons = adjustedSeasons.filter((s) => s.season_number > 0).map((s) => ({
       id: s.id.toString(),
@@ -455,7 +175,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
       statId: `${mediaId}-s${s.season_number}`,
     }));
 
-    const canonMovies = getCanonMoviesForShow(provider === 'tmdb' ? parts[2] : mediaId);
+    const canonMovies = mediaDetails.canonMovies || [];
     timelineItems = [...canonSeasons];
     for (const cm of canonMovies) {
       timelineItems.push({
@@ -496,6 +216,15 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
     }
   }
 
+  try {
+    const batch = await getMediaRankings([mediaId, ...timelineItems.map(item => item.statId), ...spinoffItems.map(item => item.id)]);
+    seasonStatsMap = batch.stats;
+    seasonRankMap = batch.ranks;
+    placementRank = batch.ranks[mediaId] ?? null;
+  } catch {
+    // Rankings are optional when the metadata provider remains available.
+  }
+
   let totalEpisodes = 0;
   let totalMovies = 0;
   let totalRelated = 0;
@@ -529,8 +258,8 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
             <FriendsRatingSection mediaId={mediaId} />
 
             {/* WHERE TO STREAM */}
-            {(localDbMedia?.watchData || mediaDetails?.watchData) && (
-              <WatchProviders watchData={localDbMedia?.watchData || mediaDetails?.watchData} />
+            {(mediaDetails?.watchData) && (
+              <WatchProviders watchData={mediaDetails?.watchData} />
             )}
 
             {/* WHERE TO WATCH (EXTERNAL LINKS) */}
@@ -566,8 +295,8 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
             )}
 
             {/* ANIME THEMES */}
-            {(animeThemes || localDbMedia?.themeData) && (
-              <AnimeThemes themeData={animeThemes || localDbMedia?.themeData} />
+            {(animeThemes) && (
+              <AnimeThemes themeData={animeThemes} />
             )}
 
             {/* KEYWORDS */}
@@ -590,7 +319,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
 
           </div>
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <h1 className="text-4xl sm:text-5xl font-black text-white">
                 {mediaDetails.title}
@@ -620,16 +349,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
                 </span>
               )}
               
-              {isSyncing && mediaTypeKey !== "manga" ? (
-                <>
-                  <span className="text-gray-600 hidden sm:inline">•</span>
-                  <div className="flex gap-2">
-                    <div className="h-6 w-24 bg-gray-800 rounded-full animate-pulse"></div>
-                    <div className="h-6 w-20 bg-gray-800 rounded-full animate-pulse"></div>
-                    <div className="h-6 w-24 bg-gray-800 rounded-full animate-pulse"></div>
-                  </div>
-                </>
-              ) : (
+              {(
                 <>
                   {mediaDetails.type === "show" && totalEpisodes > 0 && (
                     <>
@@ -769,16 +489,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
             })()}
 
             {/* DYNAMIC CREW GRID */}
-            {isSyncing && mediaTypeKey !== "manga" ? (
-              <div className="flex flex-wrap gap-x-10 gap-y-6 py-5 border-y border-gray-800/60 mb-6 mt-8">
-                {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="flex flex-col gap-2">
-                    <div className="h-3 w-16 bg-gray-800 rounded animate-pulse"></div>
-                    <div className="h-4 w-24 bg-gray-800 rounded animate-pulse"></div>
-                  </div>
-                ))}
-              </div>
-            ) : (
+            {(
               <StaffGrid 
                 primaryStaff={primaryStaff} 
                 secondaryStaff={secondaryStaff} 
@@ -827,7 +538,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
             </div>
 
             {/* TIMELINE SECTION */}
-            {!isCanonMovie && (
+            {(
               <div className="mt-12 space-y-12">
                 {mediaTypeKey === 'manga' ? (
                   <div className="mt-12">
@@ -837,7 +548,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
                         mangadexId={mediaDetails.mangadexId}
                         totalChapters={mediaDetails.chapters}
                         totalVolumes={mediaDetails.volumes}
-                        mediaId={localDbMedia?.id || mediaId}
+                        mediaId={mediaId}
                         mediaTitle={mediaDetails.title}
                         mediaImage={mediaDetails.image}
                       />
@@ -848,12 +559,10 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
                     )}
                   </div>
                 ) : (
-                  (timelineItems.length > 0 || isSyncing) && (
+                  (timelineItems.length > 0) && (
                     <div>
                       <h2 className="text-3xl font-bold mb-8">Narrative Timeline</h2>
-                      {isSyncing ? (
-                        <SyncLoader mediaId={localDbMedia.id} />
-                      ) : (
+                      {(
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {timelineItems.map((item) => {
                           const cScore = seasonStatsMap[item.statId];
@@ -932,23 +641,10 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
             <div className="lg:col-span-2">
               <GameCharacterGrid characters={mediaDetails.characters || []} />
             </div>
-          ) : isSyncing && mediaTypeKey !== "manga" ? (
-            <div className="lg:col-span-2">
-              <h2 className="text-2xl font-bold mb-6 mt-2">Cast</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[1, 2, 3, 4, 5, 6].map(i => (
-                  <div key={i} className="flex bg-gray-900 rounded-xl overflow-hidden border border-gray-800 h-24 animate-pulse">
-                    <div className="w-16 bg-gray-800"></div>
-                    <div className="flex-1 p-3"></div>
-                    <div className="w-16 bg-gray-800"></div>
-                  </div>
-                ))}
-              </div>
-            </div>
           ) : mediaDetails.castData?.edges?.length > 0 ? (
             <ExpandableAniListCast castData={mediaDetails.castData} mediaType={mediaTypeKey} />
           ) : mediaDetails.cast?.length > 0 ? (
-            <ExpandableCast cast={mediaDetails.cast.map((c: any) => ({ ...c, id: `tmdb-${c.id}`, role: c.character }))} />
+            <ExpandableCast cast={mediaDetails.cast.map((c: any) => ({ ...c, id: c.id, role: c.character }))} />
           ) : null}
           {mediaDetails.trailerUrl && (
             <div className="lg:col-span-1">

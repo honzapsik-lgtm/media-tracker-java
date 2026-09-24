@@ -62,7 +62,9 @@ ON CONFLICT DO NOTHING;
 
 -- 4. Friendships (Social Graph around admin cloudy: de161b2c-4300-4771-bd83-b50e876f64d8)
 INSERT INTO public.friendships (id, sender_id, receiver_id, status, created_at, updated_at)
-VALUES
+SELECT seed.id, seed.sender_id::uuid, seed.receiver_id::uuid,
+       seed.status::public."FriendshipStatus", seed.created_at, seed.updated_at
+FROM (VALUES
   -- Accepted friends with cloudy
   (gen_random_uuid(), 'a1111111-1111-1111-1111-111111111111', 'de161b2c-4300-4771-bd83-b50e876f64d8', 'ACCEPTED', NOW() - INTERVAL '20 days', NOW() - INTERVAL '19 days'),
   (gen_random_uuid(), 'a2222222-2222-2222-2222-222222222222', 'de161b2c-4300-4771-bd83-b50e876f64d8', 'ACCEPTED', NOW() - INTERVAL '18 days', NOW() - INTERVAL '17 days'),
@@ -90,6 +92,9 @@ VALUES
   (gen_random_uuid(), 'e6666666-6666-6666-6666-666666666666', 'e7777777-7777-7777-7777-777777777777', 'ACCEPTED', NOW() - INTERVAL '10 days', NOW() - INTERVAL '9 days'),
   (gen_random_uuid(), 'e7777777-7777-7777-7777-777777777777', 'e8888888-8888-8888-8888-888888888888', 'ACCEPTED', NOW() - INTERVAL '8 days', NOW() - INTERVAL '7 days'),
   (gen_random_uuid(), 'f1111111-1111-1111-1111-111111111111', 'f2222222-2222-2222-2222-222222222222', 'ACCEPTED', NOW() - INTERVAL '6 days', NOW() - INTERVAL '5 days')
+) AS seed(id, sender_id, receiver_id, status, created_at, updated_at)
+WHERE EXISTS (SELECT 1 FROM public.users WHERE id = seed.sender_id::uuid)
+  AND EXISTS (SELECT 1 FROM public.users WHERE id = seed.receiver_id::uuid)
 ON CONFLICT DO NOTHING;
 
 -- 5. Insert Ratings & Detailed Reviews

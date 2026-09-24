@@ -22,33 +22,9 @@ export interface MediaCredit {
   isCompany?: boolean;
 }
 
-export interface PersonProfile {
-  id: string;
-  name: string;
-  bio: string | null;
-  image: string | null;
-  birthDate: string | null;
-  deathDate: string | null;
-  credits: MediaItem[];
-}
-
-export interface GameCompany {
-  id: string; // formatted as igdb-[id]
-  name: string;
-  isDeveloper: boolean;
-  isPublisher: boolean;
-}
-
 export interface GameCharacter {
   id: number;
   name: string;
   description: string | null;
-  imageUrl: string | null;
-}
-
-export interface GameCrewMember {
-  id: string; // formatted as rawg-[id]
-  name: string;
-  role: string;
   imageUrl: string | null;
 }

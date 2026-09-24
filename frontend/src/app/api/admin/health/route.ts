@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import * as api from "@/lib/api-client";
+import { requireAdmin } from "@/lib/admin-auth";
+import { adminErrorResponse } from "@/lib/admin-api";
 
 export async function GET() {
   try {
+    await requireAdmin();
     await api.apiFetch<any>("/admin/jobs?page=1&limit=1");
     return NextResponse.json({
       ok: true,
@@ -11,6 +14,6 @@ export async function GET() {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    return NextResponse.json({ ok: false, databaseReachable: false, error: String(error) }, { status: 500 });
+    return adminErrorResponse(error);
   }
 }

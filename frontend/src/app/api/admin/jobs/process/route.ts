@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { processWorkerBatch } from "@/app/api/worker/route";
+import { processWorkerBatch } from "@/lib/admin-jobs";
 import { adminErrorResponse } from "@/lib/admin-api";
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { appLog } from "@/lib/logger";
@@ -15,7 +15,6 @@ export async function POST(request: Request) {
       event: "admin.job.process_requested",
       requestId,
       userId: admin.id,
-      persist: true,
     });
     const result = await processWorkerBatch({ requestId });
     return NextResponse.json(result);
@@ -25,7 +24,6 @@ export async function POST(request: Request) {
       event: "admin.job.process_failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }

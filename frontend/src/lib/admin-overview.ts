@@ -1,3 +1,5 @@
+import { getDatabaseSummary } from "@/lib/admin-database";
+import { getLogSummary } from "@/lib/admin-diagnostics";
 import { getCacheSummary } from "@/lib/admin-cache";
 import { ADMIN_STUCK_JOB_MINUTES, PERF_SLOW_THRESHOLD_MS } from "@/lib/admin-constants";
 import { getJobSummary } from "@/lib/admin-jobs";
@@ -11,10 +13,12 @@ export type AdminOverviewWarning = {
 };
 
 export async function getAdminOverview() {
-  const [jobs, cache, performance] = await Promise.all([
+  const [jobs, cache, performance, database, logs] = await Promise.all([
     getJobSummary(),
     getCacheSummary(),
     getPerformanceSummary(),
+    getDatabaseSummary(),
+    getLogSummary(),
   ]);
 
   const warnings: AdminOverviewWarning[] = [];
@@ -58,26 +62,20 @@ export async function getAdminOverview() {
   return {
     jobs: {
       ...jobs,
-      cancelled: 0,
+      cancelled: database.backgroundJobsByStatus.cancelled ?? 0,
     },
-    logs: {
-      errorsLastHour: 0,
-      warningsLastHour: 0,
-      errorsLast24Hours: 0,
-      warningsLast24Hours: 0,
-      latestErrorLogs: [] as any[],
-    },
+    logs,
     cache,
     database: {
-      users: 0,
-      ratings: 0,
-      ratingsWithReviews: 0,
-      watchlistEntries: 0,
-      mediaStatsRows: 0,
-      userStatsCacheRows: 0,
-      badges: 0,
-      systemLogCount: 0,
-      backgroundJobCount: 0,
+      users: database.users,
+      ratings: database.ratings,
+      ratingsWithReviews: database.ratingsWithReviewText,
+      watchlistEntries: database.watchlistEntries,
+      mediaStatsRows: database.mediaStats,
+      userStatsCacheRows: database.userStatsCache,
+      badges: database.userBadges,
+      systemLogCount: Object.values(database.systemLogsByLevel).reduce((sum, count) => sum + count, 0),
+      backgroundJobCount: Object.values(database.backgroundJobsByStatus).reduce((sum, count) => sum + count, 0),
     },
     performance,
     warnings,

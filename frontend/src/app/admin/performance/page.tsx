@@ -43,7 +43,6 @@ export default async function AdminPerformancePage({
       event: "admin.performance.page.denied",
       requestId,
       error,
-      persist: true,
     });
   }
 

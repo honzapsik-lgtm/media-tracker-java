@@ -34,6 +34,17 @@ public class MediaItemDto {
     private List<Object> canonMovies = new ArrayList<>();
     private List<Object> externalLinks = new ArrayList<>();
     private String origin;
+    private List<Object> studios = new ArrayList<>();
+    private Integer anilistId;
+    private List<Object> relatedMedia = new ArrayList<>();
+
+    public Integer getAnilistId() { return anilistId; }
+    public void setAnilistId(Integer anilistId) { this.anilistId = anilistId; }
+    public List<Object> getRelatedMedia() { return relatedMedia; }
+    public void setRelatedMedia(List<Object> relatedMedia) { this.relatedMedia = relatedMedia; }
+
+    public List<Object> getStudios() { return studios; }
+    public void setStudios(List<Object> studios) { this.studios = studios; }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }

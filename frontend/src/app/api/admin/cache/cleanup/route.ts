@@ -21,7 +21,6 @@ export async function POST(request: Request) {
         event: "admin.cache.cleanup_confirmation_missing",
         requestId,
         userId: admin.id,
-        persist: true,
       });
       if (isForm) {
         return NextResponse.redirect(new URL("/admin/cache?error=invalid_confirmation", request.url), 303);
@@ -29,7 +28,7 @@ export async function POST(request: Request) {
       return confirmationRequiredResponse(requestId);
     }
 
-    const deletedCount = await cleanupExpiredCache({ requestId, userId: admin.id });
+    const deletedCount = await cleanupExpiredCache({ requestId });
 
     await appLog({
       level: "info",
@@ -37,7 +36,6 @@ export async function POST(request: Request) {
       requestId,
       userId: admin.id,
       metadata: { deletedCount },
-      persist: true,
     });
 
     if (isForm) {
@@ -51,7 +49,6 @@ export async function POST(request: Request) {
       event: error instanceof AdminAuthError ? "admin.cache.cleanup_denied" : "admin.cache.cleanup_failed",
       requestId,
       error,
-      persist: true,
     });
     const contentType = request.headers.get("content-type") ?? "";
     const isForm = contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data");

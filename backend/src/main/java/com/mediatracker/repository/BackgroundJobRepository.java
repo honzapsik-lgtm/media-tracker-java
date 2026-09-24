@@ -28,7 +28,33 @@ public interface BackgroundJobRepository extends JpaRepository<BackgroundJobEnti
 
     Page<BackgroundJobEntity> findByStatus(String status, Pageable pageable);
 
+    String ADMIN_FILTERS = """
+        FROM "BackgroundJob" j
+        WHERE (cast(:status as text) IS NULL OR j.status = :status)
+          AND (cast(:type as text) IS NULL OR j.type = :type)
+          AND (cast(:dedupeKey as text) IS NULL OR strpos(lower(coalesce(j.dedupe_key, '')), lower(:dedupeKey)) > 0)
+          AND (cast(:userId as text) IS NULL OR j.payload ->> 'userId' = :userId)
+          AND (cast(:q as text) IS NULL
+            OR strpos(lower(j.id), lower(:q)) > 0
+            OR strpos(lower(j.type), lower(:q)) > 0
+            OR strpos(lower(coalesce(j.dedupe_key, '')), lower(:q)) > 0
+            OR strpos(lower(coalesce(j.last_error, '')), lower(:q)) > 0
+            OR strpos(lower(cast(j.payload as text)), lower(:q)) > 0)
+        """;
+
+    @Query(value = "SELECT j.* " + ADMIN_FILTERS + " ORDER BY j.created_at DESC, j.id DESC",
+            countQuery = "SELECT count(*) " + ADMIN_FILTERS, nativeQuery = true)
+    Page<BackgroundJobEntity> findAdminJobs(@Param("status") String status,
+            @Param("type") String type, @Param("dedupeKey") String dedupeKey,
+            @Param("userId") String userId, @Param("q") String q, Pageable pageable);
+
     long countByStatus(String status);
+
+    long countByStatusAndProcessedAtAfter(String status, LocalDateTime cutoff);
+
+    long countByStatusAndLockedAtBefore(String status, LocalDateTime cutoff);
+
+    Optional<BackgroundJobEntity> findFirstByStatusOrderByCreatedAtAsc(String status);
 
     @Modifying
     @Query("""

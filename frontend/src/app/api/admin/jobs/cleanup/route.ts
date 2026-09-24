@@ -18,7 +18,6 @@ export async function POST(request: Request) {
         event: "admin.job.cleanup_confirmation_missing",
         requestId,
         userId: admin.id,
-        persist: true,
       });
       return confirmationRequiredResponse(requestId);
     }
@@ -38,7 +37,6 @@ export async function POST(request: Request) {
       requestId,
       userId: admin.id,
       metadata: { olderThanDays, deletedCount: res.deletedCount },
-      persist: true,
     });
     return NextResponse.json({ ok: true, deletedCount: res.deletedCount });
   } catch (error) {
@@ -47,7 +45,6 @@ export async function POST(request: Request) {
       event: "admin.job.cleanup_failed",
       requestId,
       error,
-      persist: true,
     });
     return adminErrorResponse(error, requestId);
   }
