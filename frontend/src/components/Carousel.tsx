@@ -1,42 +1,43 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 
 export default function Carousel({ children }: { children: React.ReactNode }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
 
-  const checkArrows = () => {
+  const checkArrows = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const canScrollLeft = el.scrollLeft > 10;
     const canScrollRight = el.scrollLeft < el.scrollWidth - el.clientWidth - 10;
     setShowLeftArrow(canScrollLeft);
     setShowRightArrow(canScrollRight);
-  };
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    
-    // Check initial state
-    checkArrows();
 
-    // Set up resize observer to check arrows when size changes
+    checkArrows();
+    const timer1 = setTimeout(checkArrows, 150);
+    const timer2 = setTimeout(checkArrows, 500);
+
     const resizeObserver = new ResizeObserver(() => {
       checkArrows();
     });
     resizeObserver.observe(el);
 
-    // Also check on scroll
     el.addEventListener('scroll', checkArrows, { passive: true });
 
     return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
       resizeObserver.disconnect();
       el.removeEventListener('scroll', checkArrows);
     };
-  }, [children]);
+  }, [children, checkArrows]);
 
   const scroll = (direction: 'left' | 'right') => {
     const el = scrollRef.current;
@@ -50,8 +51,13 @@ export default function Carousel({ children }: { children: React.ReactNode }) {
       {/* Left Arrow Button */}
       {showLeftArrow && (
         <button
-          onClick={() => scroll('left')}
-          className="absolute -left-5 top-[40%] -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-gray-900/90 hover:bg-gray-800 border border-gray-800/80 hover:border-gray-700 text-white flex items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm"
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            scroll('left');
+          }}
+          className="absolute -left-3 sm:-left-5 top-1/2 -translate-y-1/2 z-30 w-11 h-11 rounded-full bg-gray-900/90 hover:bg-blue-600 border border-gray-700/80 hover:border-blue-400 text-white flex items-center justify-center transition-all shadow-2xl hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-md"
           aria-label="Scroll Left"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -60,10 +66,10 @@ export default function Carousel({ children }: { children: React.ReactNode }) {
         </button>
       )}
 
-      {/* Scrollable Container */}
+      {/* Scrollable Container with vertical padding headroom to prevent hover scale clipping */}
       <div
         ref={scrollRef}
-        className="flex overflow-x-auto pb-4 gap-6 snap-x hide-scrollbar scroll-smooth w-full -mx-6 px-6 sm:mx-0 sm:px-0"
+        className="flex overflow-x-auto pt-4 pb-4 -my-4 gap-6 snap-x hide-scrollbar scroll-smooth w-full -mx-6 px-6 sm:mx-0 sm:px-0"
       >
         {children}
       </div>
@@ -71,8 +77,13 @@ export default function Carousel({ children }: { children: React.ReactNode }) {
       {/* Right Arrow Button */}
       {showRightArrow && (
         <button
-          onClick={() => scroll('right')}
-          className="absolute -right-5 top-[40%] -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-gray-900/90 hover:bg-gray-800 border border-gray-800/80 hover:border-gray-700 text-white flex items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm"
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            scroll('right');
+          }}
+          className="absolute -right-3 sm:-right-5 top-1/2 -translate-y-1/2 z-30 w-11 h-11 rounded-full bg-gray-900/90 hover:bg-blue-600 border border-gray-700/80 hover:border-blue-400 text-white flex items-center justify-center transition-all shadow-2xl hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-md"
           aria-label="Scroll Right"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">

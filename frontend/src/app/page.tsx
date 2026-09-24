@@ -3,6 +3,9 @@ import SearchBar from "@/components/SearchBar";
 import MediaRow from "@/components/MediaRow";
 import FriendActivityFeed from "@/components/FriendActivityFeed";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function Home() {
   const [movies, shows, games] = await Promise.all([
     api.discoverMedia("movie", "", "", "popular", 1).catch(() => []),
@@ -17,8 +20,8 @@ export default async function Home() {
       type: item.type || defaultType,
       image: item.image,
       releaseDate: item.releaseDate,
-      communityScore: typeof item.globalScore === "number" ? item.globalScore : null,
-      listRank: null,
+      communityScore: typeof item.communityScore === "number" ? item.communityScore : null,
+      listRank: typeof item.listRank === "number" ? item.listRank : null,
     }));
 
   const enhancedMovies = mapToMediaItem(movies, "movie");

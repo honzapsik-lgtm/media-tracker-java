@@ -45,17 +45,17 @@ export default async function DiscoverPage({
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-            {results.map((item: DiscoverMediaItem) => {
-              const cScore = statsMap[item.id];
-              const gRank = rankMap[item.id];
+            {results.map((item: any) => {
+              const cScore = typeof item.communityScore === "number" ? item.communityScore : (statsMap[item.id] || null);
+              const gRank = typeof item.listRank === "number" ? item.listRank : (rankMap[item.id] || null);
 
               return (
                 <MediaCardVertical 
                   key={item.id} 
                   item={{
                     ...item,
-                    communityScore: cScore || null,
-                    listRank: gRank || null,
+                    communityScore: cScore,
+                    listRank: gRank,
                     releaseDate: item.releaseDate ?? null,
                   }} 
                 />

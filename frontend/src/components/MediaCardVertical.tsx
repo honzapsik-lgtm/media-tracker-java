@@ -15,7 +15,7 @@ export default function MediaCardVertical({ item }: { item: MediaItem }) {
   return (
     <Link 
       href={`/media/${item.id}`} 
-      className="block hover:scale-105 transition-transform duration-300 relative group h-full"
+      className="block hover:scale-105 hover:z-20 transition-all duration-300 relative group h-full"
     >
       <div className="bg-gray-900 rounded-xl shadow-lg h-full border border-gray-800 relative flex flex-col">
         {/* Top Left: Community Score Badge */}

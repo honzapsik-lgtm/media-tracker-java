@@ -16,9 +16,54 @@ import java.util.List;
 public class MediaController {
 
     private final MediaService mediaService;
+    private final com.mediatracker.repository.MediaStatsRepository mediaStatsRepository;
+    private final com.mediatracker.repository.GlobalRankingRepository globalRankingRepository;
 
-    public MediaController(MediaService mediaService) {
+    public MediaController(MediaService mediaService,
+                           com.mediatracker.repository.MediaStatsRepository mediaStatsRepository,
+                           com.mediatracker.repository.GlobalRankingRepository globalRankingRepository) {
         this.mediaService = mediaService;
+        this.mediaStatsRepository = mediaStatsRepository;
+        this.globalRankingRepository = globalRankingRepository;
+    }
+
+    @PostMapping("/batch-stats")
+    @Operation(summary = "Batch retrieve community scores and global list ranks for media IDs")
+    public ResponseEntity<?> getBatchStats(@RequestBody(required = false) java.util.Map<String, List<String>> body) {
+        List<String> ids = body != null ? body.getOrDefault("ids", List.of()) : List.of();
+        return resolveBatchStats(ids);
+    }
+
+    @GetMapping("/batch-stats")
+    @Operation(summary = "Batch retrieve community scores and global list ranks via query params")
+    public ResponseEntity<?> getBatchStatsGet(@RequestParam(name = "ids", defaultValue = "") List<String> ids) {
+        return resolveBatchStats(ids);
+    }
+
+    private ResponseEntity<?> resolveBatchStats(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return ResponseEntity.ok(java.util.Map.of("stats", java.util.Map.of(), "ranks", java.util.Map.of()));
+        }
+
+        java.util.Map<String, Integer> statsMap = mediaStatsRepository.findAllById(ids)
+                .stream()
+                .filter(s -> s.getCommunityAverage() != null && s.getTotalRatings() != null && s.getTotalRatings() > 0)
+                .collect(java.util.stream.Collectors.toMap(
+                        com.mediatracker.model.entity.MediaStatsEntity::getId,
+                        s -> s.getCommunityAverage().intValue(),
+                        (a, b) -> a
+                ));
+
+        java.util.Map<String, Integer> rankMap = globalRankingRepository.findAllById(ids)
+                .stream()
+                .filter(r -> r.getRank() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        com.mediatracker.model.entity.GlobalRankingEntity::getMediaId,
+                        com.mediatracker.model.entity.GlobalRankingEntity::getRank,
+                        (a, b) -> a
+                ));
+
+        return ResponseEntity.ok(java.util.Map.of("stats", statsMap, "ranks", rankMap));
     }
 
     @GetMapping("/{slug}")

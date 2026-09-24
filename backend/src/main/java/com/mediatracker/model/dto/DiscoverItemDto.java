@@ -6,6 +6,8 @@ public class DiscoverItemDto {
     private String image;
     private String type;
     private Integer globalScore;
+    private Integer communityScore;
+    private Integer listRank;
     private String releaseDate;
 
     public DiscoverItemDto() {}
@@ -29,6 +31,10 @@ public class DiscoverItemDto {
     public void setType(String type) { this.type = type; }
     public Integer getGlobalScore() { return globalScore; }
     public void setGlobalScore(Integer globalScore) { this.globalScore = globalScore; }
+    public Integer getCommunityScore() { return communityScore; }
+    public void setCommunityScore(Integer communityScore) { this.communityScore = communityScore; }
+    public Integer getListRank() { return listRank; }
+    public void setListRank(Integer listRank) { this.listRank = listRank; }
     public String getReleaseDate() { return releaseDate; }
     public void setReleaseDate(String releaseDate) { this.releaseDate = releaseDate; }
 }
