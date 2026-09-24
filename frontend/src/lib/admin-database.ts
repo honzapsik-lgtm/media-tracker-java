@@ -1,3 +1,5 @@
+import { apiFetch } from "@/lib/api-client";
+
 export type IntegrityCheckResult = {
   id: string;
   label: string;
@@ -8,21 +10,41 @@ export type IntegrityCheckResult = {
 };
 
 export async function getDatabaseSummary() {
-  return {
-    users: 0,
-    accounts: 0,
-    sessions: 0,
-    ratings: 0,
-    ratingsWithReviewText: 0,
-    deepReviews: 0,
-    watchlistEntries: 0,
-    mediaStats: 0,
-    userBadges: 0,
-    userStatsCache: 0,
-    apiCache: 0,
-    backgroundJobsByStatus: {} as Record<string, number>,
-    systemLogsByLevel: {} as Record<string, number>,
-  };
+  try {
+    const summary = await apiFetch<any>("/admin/database/summary");
+    return {
+      users: Number(summary.users ?? 0),
+      accounts: Number(summary.accounts ?? 0),
+      sessions: Number(summary.sessions ?? 0),
+      ratings: Number(summary.ratings ?? 0),
+      ratingsWithReviewText: Number(summary.ratingsWithReviewText ?? 0),
+      deepReviews: Number(summary.deepReviews ?? 0),
+      watchlistEntries: Number(summary.watchlistEntries ?? 0),
+      mediaStats: Number(summary.mediaStats ?? 0),
+      userBadges: Number(summary.userBadges ?? 0),
+      userStatsCache: Number(summary.userStatsCache ?? 0),
+      apiCache: Number(summary.apiCache ?? 0),
+      backgroundJobsByStatus: (summary.backgroundJobsByStatus ?? {}) as Record<string, number>,
+      systemLogsByLevel: (summary.systemLogsByLevel ?? {}) as Record<string, number>,
+    };
+  } catch (error) {
+    console.error("[getDatabaseSummary] Error fetching database summary:", error);
+    return {
+      users: 0,
+      accounts: 0,
+      sessions: 0,
+      ratings: 0,
+      ratingsWithReviewText: 0,
+      deepReviews: 0,
+      watchlistEntries: 0,
+      mediaStats: 0,
+      userBadges: 0,
+      userStatsCache: 0,
+      apiCache: 0,
+      backgroundJobsByStatus: {} as Record<string, number>,
+      systemLogsByLevel: {} as Record<string, number>,
+    };
+  }
 }
 
 export async function getUsersMissingStatsCacheCount(): Promise<number> {

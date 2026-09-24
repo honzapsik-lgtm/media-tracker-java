@@ -53,7 +53,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/cron/**").permitAll()
                         // Admin endpoints
-                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SYSTEM")
+                        .requestMatchers("/api/admin/**", "/api/debug/**").hasAnyRole("ADMIN", "SYSTEM")
                         // Everything else requires auth
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll()

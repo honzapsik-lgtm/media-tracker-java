@@ -1,12 +1,8 @@
 package com.mediatracker.service;
 
-import com.mediatracker.model.entity.UserListEntity;
-import com.mediatracker.model.entity.UserListItemEntity;
+import com.mediatracker.model.entity.*;
 import com.mediatracker.model.enums.MediaType;
-import com.mediatracker.model.entity.UserRatingEntity;
-import com.mediatracker.repository.UserListItemRepository;
-import com.mediatracker.repository.UserListRepository;
-import com.mediatracker.repository.UserRatingRepository;
+import com.mediatracker.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,13 +15,19 @@ public class ListService {
     private final UserListRepository userListRepository;
     private final UserListItemRepository userListItemRepository;
     private final UserRatingRepository userRatingRepository;
+    private final UserWatchlistRepository userWatchlistRepository;
+    private final MediaRepository mediaRepository;
 
     public ListService(UserListRepository userListRepository,
                        UserListItemRepository userListItemRepository,
-                       UserRatingRepository userRatingRepository) {
+                       UserRatingRepository userRatingRepository,
+                       UserWatchlistRepository userWatchlistRepository,
+                       MediaRepository mediaRepository) {
         this.userListRepository = userListRepository;
         this.userListItemRepository = userListItemRepository;
         this.userRatingRepository = userRatingRepository;
+        this.userWatchlistRepository = userWatchlistRepository;
+        this.mediaRepository = mediaRepository;
     }
 
     public List<Map<String, Object>> getUserLists(UUID userId, MediaType mediaType) {
@@ -85,12 +87,38 @@ public class ListService {
             itemMap.put("mediaTitle", item.getMediaTitle());
             itemMap.put("mediaImage", item.getMediaImage());
 
-            String title = item.getMediaTitle() != null ? item.getMediaTitle()
-                    : rating != null && rating.getMediaTitle() != null ? rating.getMediaTitle()
-                    : "Unknown Title";
-            String image = item.getMediaImage() != null ? item.getMediaImage()
-                    : rating != null ? rating.getMediaImage()
-                    : null;
+            String title = item.getMediaTitle();
+            if (title == null || title.isBlank() || "Unknown Title".equalsIgnoreCase(title)) {
+                if (rating != null && rating.getMediaTitle() != null && !rating.getMediaTitle().isBlank()) {
+                    title = rating.getMediaTitle();
+                } else {
+                    Optional<UserWatchlistEntity> wOpt = userWatchlistRepository.findByUserIdAndMediaId(list.getUserId(), item.getMediaId());
+                    if (wOpt.isPresent() && wOpt.get().getMediaTitle() != null && !wOpt.get().getMediaTitle().isBlank()) {
+                        title = wOpt.get().getMediaTitle();
+                    } else {
+                        Optional<MediaEntity> mOpt = mediaRepository.findById(item.getMediaId());
+                        if (mOpt.isPresent() && mOpt.get().getTitle() != null && !mOpt.get().getTitle().isBlank()) {
+                            title = mOpt.get().getTitle();
+                        }
+                    }
+                }
+            }
+            if (title == null || title.isBlank()) {
+                title = "Unknown Title";
+            }
+
+            String image = item.getMediaImage();
+            if (image == null || image.isBlank()) {
+                if (rating != null && rating.getMediaImage() != null && !rating.getMediaImage().isBlank()) {
+                    image = rating.getMediaImage();
+                } else {
+                    Optional<UserWatchlistEntity> wOpt = userWatchlistRepository.findByUserIdAndMediaId(list.getUserId(), item.getMediaId());
+                    if (wOpt.isPresent() && wOpt.get().getMediaImage() != null) {
+                        image = wOpt.get().getMediaImage();
+                    }
+                }
+            }
+
             String releaseDate = rating != null ? rating.getMediaReleaseDate() : null;
 
             itemMap.put("title", title);
@@ -152,6 +180,30 @@ public class ListService {
                         : item.get("mediaTitle") != null ? String.valueOf(item.get("mediaTitle")) : null;
                 String image = item.get("image") != null ? String.valueOf(item.get("image"))
                         : item.get("mediaImage") != null ? String.valueOf(item.get("mediaImage")) : null;
+
+                // Resolve missing titles or images from user ratings, watchlist, or media catalog
+                if (title == null || title.isBlank() || "null".equals(title) || "Unknown Title".equalsIgnoreCase(title)) {
+                    Optional<UserRatingEntity> rOpt = userRatingRepository.findByUserIdAndMediaId(userId, mediaId);
+                    if (rOpt.isPresent() && rOpt.get().getMediaTitle() != null && !rOpt.get().getMediaTitle().isBlank()) {
+                        title = rOpt.get().getMediaTitle();
+                        if (image == null || image.isBlank() || "null".equals(image)) {
+                            image = rOpt.get().getMediaImage();
+                        }
+                    } else {
+                        Optional<UserWatchlistEntity> wOpt = userWatchlistRepository.findByUserIdAndMediaId(userId, mediaId);
+                        if (wOpt.isPresent() && wOpt.get().getMediaTitle() != null && !wOpt.get().getMediaTitle().isBlank()) {
+                            title = wOpt.get().getMediaTitle();
+                            if (image == null || image.isBlank() || "null".equals(image)) {
+                                image = wOpt.get().getMediaImage();
+                            }
+                        } else {
+                            Optional<MediaEntity> mOpt = mediaRepository.findById(mediaId);
+                            if (mOpt.isPresent() && mOpt.get().getTitle() != null && !mOpt.get().getTitle().isBlank()) {
+                                title = mOpt.get().getTitle();
+                            }
+                        }
+                    }
+                }
 
                 UserListItemEntity li = new UserListItemEntity();
                 li.setListId(listId);

@@ -11,4 +11,5 @@ import java.util.UUID;
 @Repository
 public interface UserBadgeRepository extends JpaRepository<UserBadgeEntity, UserBadgeId> {
     List<UserBadgeEntity> findByUserId(UUID userId);
+    long countByUserId(UUID userId);
 }

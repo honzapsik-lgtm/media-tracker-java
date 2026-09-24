@@ -1,4 +1,5 @@
 import { ADMIN_DEFAULT_PAGE_SIZE, ADMIN_MAX_PAGE_SIZE } from "@/lib/admin-constants";
+import { apiFetch } from "@/lib/api-client";
 
 export type CacheFilters = {
   page?: number;
@@ -24,15 +25,29 @@ export function parseBooleanFilter(value: string | null | undefined) {
 }
 
 export async function getCacheSummary() {
-  return {
-    totalEntries: 0,
-    expiredEntries: 0,
-    freshEntries: 0,
-    oldestExpiredAgeSeconds: null,
-    byProvider: {} as Record<string, number>,
-    byType: {} as Record<string, number>,
-    lastCleanupLog: null,
-  };
+  try {
+    const summary = await apiFetch<any>("/admin/cache/summary");
+    return {
+      totalEntries: Number(summary.totalEntries ?? 0),
+      expiredEntries: Number(summary.expiredEntries ?? 0),
+      freshEntries: Number(summary.freshEntries ?? 0),
+      oldestExpiredAgeSeconds: summary.oldestExpiredAgeSeconds ?? null,
+      byProvider: (summary.byProvider ?? {}) as Record<string, number>,
+      byType: (summary.byType ?? {}) as Record<string, number>,
+      lastCleanupLog: summary.lastCleanupLog ?? null,
+    };
+  } catch (err) {
+    console.error("[getCacheSummary] Error fetching cache summary:", err);
+    return {
+      totalEntries: 0,
+      expiredEntries: 0,
+      freshEntries: 0,
+      oldestExpiredAgeSeconds: null,
+      byProvider: {} as Record<string, number>,
+      byType: {} as Record<string, number>,
+      lastCleanupLog: null,
+    };
+  }
 }
 
 export async function getPaginatedCacheEntries(filters: CacheFilters) {
@@ -51,23 +66,27 @@ export async function getPaginatedCacheEntries(filters: CacheFilters) {
 }
 
 export async function cleanupExpiredCache(_options?: { requestId?: string; userId?: string }) {
-  return 0;
+  try {
+    const res = await apiFetch<{ deleted: number }>("/admin/cache/cleanup", { method: "POST" });
+    return res.deleted ?? 0;
+  } catch (err) {
+    console.error("[cleanupExpiredCache] Error:", err);
+    return 0;
+  }
 }
 
 export function serializeCacheEntry(entry: any) {
   const now = new Date();
   return {
     id: entry?.id || "",
-    key: entry?.id || "",
-    provider: entry?.provider || "",
+    key: entry?.id || entry?.key || "",
+    provider: entry?.provider || "unknown",
+    createdAt: entry?.createdAt ? new Date(entry.createdAt) : now,
+    updatedAt: entry?.updatedAt ? new Date(entry.updatedAt) : (entry?.createdAt ? new Date(entry.createdAt) : now),
+    expiresAt: entry?.expiresAt ? new Date(entry.expiresAt) : now,
+    isExpired: entry?.expiresAt ? new Date(entry.expiresAt) < now : false,
+    expired: entry?.expiresAt ? new Date(entry.expiresAt) < now : false,
+    payloadSizeBytes: Number(entry?.payloadSizeBytes ?? entry?.size ?? 0),
     type: inferCacheType(entry?.id || ""),
-    createdAt: entry?.created_at ? new Date(entry.created_at) : now,
-    updatedAt: entry?.updated_at ? new Date(entry.updated_at) : now,
-    expiresAt: entry?.expires_at ? new Date(entry.expires_at) : now,
-    expired: false,
-    isExpired: false,
-    ageSeconds: 0,
-    expiresInSeconds: 0,
-    payloadSizeBytes: 0,
   };
 }

@@ -1,23 +1,21 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
+import * as api from "@/lib/api-client";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ mediaId: string }> }
 ) {
-  const { mediaId } = await params;
-  return NextResponse.json({
-    tracking: {
-      id: mediaId,
-      type: "MOVIE",
-    },
-    caches: [],
-    stats: null,
-    aggregations: {
-      totalRatings: 0,
-      writtenReviews: 0,
-      deepReviews: 0,
-      watchlistInclusions: 0,
-    },
-    logs: [],
-  });
+  try {
+    await requireAdmin();
+    const { mediaId } = await params;
+    const data = await api.apiFetch<any>(`/admin/media/${encodeURIComponent(mediaId)}`);
+    return NextResponse.json(data);
+  } catch (error: any) {
+    console.error("[api/admin/media/[mediaId] GET] Error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to fetch media diagnostics" },
+      { status: error.status || 500 }
+    );
+  }
 }

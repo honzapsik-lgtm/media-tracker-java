@@ -64,7 +64,7 @@ export const authOptions: NextAuthOptions = {
         token.username = session.username;
       }
 
-      // 3. Session self-healing: if token.id is not a UUID or username is missing, sync with backend
+      // 3. Session self-healing and role sync: if token.id is not a UUID or username/role need refresh
       if (token.id && (!token.username || !isUUID(String(token.id)))) {
         try {
           const res = await fetch(`${API_BASE_URL}/auth/oauth-sync`, {
@@ -89,6 +89,26 @@ export const authOptions: NextAuthOptions = {
             token.name = dbUser.name || token.name;
             token.email = dbUser.email || token.email;
             token.picture = dbUser.image || token.picture;
+          }
+        } catch {
+          // ignore background fetch error
+        }
+      } else if (token.id && (token.role !== "admin" || trigger === "update")) {
+        // Query backend to pick up newly assigned admin roles without forcing user logout
+        try {
+          const res = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: {
+              "X-Internal-Gateway-Key": GATEWAY_SECRET,
+              "X-User-Id": String(token.id),
+            },
+          });
+          if (res.ok) {
+            const me = await res.json();
+            if (me.role) token.role = me.role;
+            if (me.username) token.username = me.username;
+            if (me.name) token.name = me.name;
+            if (me.email) token.email = me.email;
+            if (me.image) token.picture = me.image;
           }
         } catch {
           // ignore background fetch error

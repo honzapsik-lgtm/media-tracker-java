@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
+import * as api from "@/lib/api-client";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
-  const { userId } = await params;
-  return NextResponse.json({
-    user: { id: userId, name: "User", role: "USER", email: "" },
-    accounts: [],
-    sessions: [],
-    statsCache: [],
-    aggregations: { ratings: 0, watchlist: 0, badges: 0, lists: 0 },
-    jobs: [],
-    logs: [],
-  });
+  try {
+    await requireAdmin();
+    const { userId } = await params;
+    const data = await api.apiFetch<any>(`/admin/users/${encodeURIComponent(userId)}`);
+    return NextResponse.json(data);
+  } catch (error: any) {
+    console.error("[api/admin/users/[userId] GET] Error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to fetch user diagnostics" },
+      { status: error.status || 500 }
+    );
+  }
 }

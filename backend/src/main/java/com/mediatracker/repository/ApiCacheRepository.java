@@ -11,4 +11,6 @@ import java.util.Optional;
 public interface ApiCacheRepository extends JpaRepository<ApiCacheEntity, String> {
     Optional<ApiCacheEntity> findByIdAndExpiresAtAfter(String id, LocalDateTime now);
     void deleteByExpiresAtBefore(LocalDateTime now);
+    long countByExpiresAtBefore(LocalDateTime now);
+    long countByExpiresAtAfter(LocalDateTime now);
 }

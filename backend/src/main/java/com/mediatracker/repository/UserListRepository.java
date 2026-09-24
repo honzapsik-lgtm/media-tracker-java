@@ -12,4 +12,5 @@ import java.util.UUID;
 public interface UserListRepository extends JpaRepository<UserListEntity, UUID> {
     List<UserListEntity> findByUserId(UUID userId);
     List<UserListEntity> findByUserIdAndMediaType(UUID userId, MediaType mediaType);
+    long countByUserId(UUID userId);
 }
