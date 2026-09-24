@@ -313,12 +313,13 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
   let stats: { community_average: number; total_ratings: number } | null = null;
   let globalCriteriaAverages: Record<string, number> = {};
   const placementRank: number | null = null;
-  const reviews: any[] = [];
+  let reviews: any[] = [];
 
   try {
     const ratingData = await getRatings(mediaId);
     if (ratingData?.stats) stats = ratingData.stats;
     if (ratingData?.globalCriteriaAverages) globalCriteriaAverages = ratingData.globalCriteriaAverages;
+    if (Array.isArray(ratingData?.reviews)) reviews = ratingData.reviews;
   } catch {
     // API offline or not rated yet
   }

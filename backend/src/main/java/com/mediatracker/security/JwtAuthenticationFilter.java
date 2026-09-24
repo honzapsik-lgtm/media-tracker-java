@@ -46,31 +46,31 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
         String xUserId = request.getHeader("X-User-Id");
+        String gatewayKey = request.getHeader("X-Internal-Gateway-Key");
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7).trim();
             processBearerToken(token, request);
-        } else if (xUserId != null && !xUserId.isBlank()) {
-            // Validate internal gateway key to prevent unauthorized header spoofing
-            String gatewayKey = request.getHeader("X-Internal-Gateway-Key");
-            if (gatewayKey == null || !gatewayKey.equals(gatewaySecret)) {
-                log.warn("Unauthorized internal header spoofing attempt from {}", request.getRemoteAddr());
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.setContentType("application/json");
-                response.getWriter().write("{\"error\": \"Unauthorized: Invalid internal gateway key\"}");
-                return;
+        } else if (gatewayKey != null && gatewayKey.equals(gatewaySecret)) {
+            UUID userId = null;
+            if (xUserId != null && !xUserId.isBlank()) {
+                try {
+                    userId = UUID.fromString(xUserId);
+                } catch (IllegalArgumentException ignored) {}
             }
-
-            try {
-                UUID userId = UUID.fromString(xUserId);
-                String role = request.getHeader("X-User-Role");
-                String email = request.getHeader("X-User-Email");
-                SecurityUser user = new SecurityUser(userId, email, role != null ? role : "user");
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (IllegalArgumentException ignored) {}
+            String role = request.getHeader("X-User-Role");
+            String email = request.getHeader("X-User-Email");
+            SecurityUser user = new SecurityUser(userId, email, role != null ? role : (userId != null ? "user" : "system"));
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+        } else if (xUserId != null && !xUserId.isBlank()) {
+            log.warn("Unauthorized internal header spoofing attempt from {}", request.getRemoteAddr());
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\": \"Unauthorized: Invalid internal gateway key\"}");
+            return;
         }
 
         filterChain.doFilter(request, response);

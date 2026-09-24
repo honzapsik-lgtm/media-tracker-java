@@ -138,6 +138,20 @@ public class RatingService {
             result.put("stats", stats);
         });
 
+        List<UserRatingEntity> mediaReviews = userRatingRepository.findByMediaIdAndReviewTextIsNotNullOrderByCreatedAtDesc(mediaId);
+        List<Map<String, Object>> reviewsList = mediaReviews.stream().map(r -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", r.getId());
+            map.put("userId", r.getUserId());
+            map.put("username", r.getUsername());
+            map.put("avatar_url", r.getAvatarUrl());
+            map.put("score", r.getScore());
+            map.put("review_text", r.getReviewText());
+            map.put("created_at", r.getCreatedAt() != null ? r.getCreatedAt().toString() : null);
+            return map;
+        }).toList();
+        result.put("reviews", reviewsList);
+
         return result;
     }
 

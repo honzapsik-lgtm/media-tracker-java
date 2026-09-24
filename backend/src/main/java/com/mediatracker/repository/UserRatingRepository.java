@@ -21,6 +21,7 @@ public interface UserRatingRepository extends JpaRepository<UserRatingEntity, UU
     List<UserRatingEntity> findByUserIdInAndMediaId(List<UUID> userIds, String mediaId);
     List<UserRatingEntity> findByUserIdIn(List<UUID> userIds);
     List<UserRatingEntity> findByUserIdAndMediaIdStartingWith(UUID userId, String prefix);
+    List<UserRatingEntity> findByMediaIdAndReviewTextIsNotNullOrderByCreatedAtDesc(String mediaId);
 
     Page<UserRatingEntity> findByUserId(UUID userId, Pageable pageable);
     Page<UserRatingEntity> findByUserIdAndReviewTextIsNotNull(UUID userId, Pageable pageable);
