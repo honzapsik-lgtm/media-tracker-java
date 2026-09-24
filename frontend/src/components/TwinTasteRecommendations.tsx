@@ -60,7 +60,6 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl">✨</span>
               <h2 className="text-lg font-black text-white tracking-wide">Twin Taste Match</h2>
               <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 Personalized
@@ -86,7 +85,6 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
     return (
       <div className="mb-12 rounded-2xl border border-blue-900/40 bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-gray-900/50 p-6 backdrop-blur-md">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xl">🎯</span>
           <h2 className="text-lg font-black text-white tracking-wide">Twin Taste Match</h2>
           <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
             Awaiting Ratings
@@ -107,7 +105,6 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
     return (
       <div className="mb-12 rounded-2xl border border-gray-800 bg-gray-900/50 p-6">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xl">✨</span>
           <h2 className="text-lg font-black text-white">Twin Taste Match</h2>
         </div>
         <p className="text-sm text-gray-400">
@@ -124,7 +121,6 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
         <div className="rounded-2xl border border-purple-900/30 bg-gradient-to-r from-purple-950/30 via-indigo-950/20 to-gray-900/40 p-5 backdrop-blur-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <span className="text-xl">🎯</span>
               <h2 className="text-lg font-black text-white tracking-wide">Your Taste Twins</h2>
               <span className="text-xs text-gray-400">Users who share your viewing preferences</span>
             </div>
@@ -163,7 +159,6 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
       {hasTwinRecs && (
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-xl">✨</span>
             <h2 className="text-2xl font-bold tracking-wide text-gray-100">Twin Taste Picks</h2>
             <span className="text-xs font-semibold text-purple-400 px-2 py-0.5 rounded bg-purple-950/60 border border-purple-800/50">
               Highly Rated by Users With Your Taste
@@ -197,7 +192,6 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
       {hasContentRec && data.contentRecommendation && (
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-xl">🎬</span>
             <h2 className="text-2xl font-bold tracking-wide text-gray-100">
               Because You Loved <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">{data.contentRecommendation.sourceTitle}</span>
             </h2>
