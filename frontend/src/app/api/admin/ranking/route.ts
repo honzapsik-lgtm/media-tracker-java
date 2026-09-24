@@ -4,10 +4,7 @@ import { adminErrorResponse } from "@/lib/admin-api";
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { appLog } from "@/lib/logger";
 import { getOrCreateRequestId } from "@/lib/request-id";
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
+import * as api from "@/lib/api-client";
 
 export async function POST(request: Request) {
   const requestId = getOrCreateRequestId(request.headers);
@@ -22,8 +19,8 @@ export async function POST(request: Request) {
       persist: true,
     });
     
-    // Execute the standalone worker script and wait for it to finish
-    await execAsync("npx tsx scripts/rank-aggregation-worker.ts");
+    // Call Spring Boot backend to calculate PageRank aggregation across all media types
+    await api.apiFetch("/admin/ranking", { method: "POST" });
 
     // Globally invalidate the Next.js cache so the UI reflects the new ranks immediately
     revalidatePath("/", "layout");

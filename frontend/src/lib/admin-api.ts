@@ -4,8 +4,9 @@ import { AdminAuthError, adminStatusForError } from "@/lib/admin-auth";
 export const CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED";
 
 export function adminErrorToBody(error: unknown, requestId?: string) {
-  const code = error instanceof AdminAuthError ? error.code : "ADMIN_REQUIRED";
-  return { error: code, requestId };
+  const code = error instanceof AdminAuthError ? error.code : "INTERNAL_ERROR";
+  const message = error instanceof Error ? error.message : undefined;
+  return { error: code, ...(message && !(error instanceof AdminAuthError) ? { message } : {}), requestId };
 }
 
 export function adminErrorResponse(error: unknown, requestId?: string) {
