@@ -260,18 +260,19 @@ public class AdminController {
         long watchlistInclusions = userWatchlistRepository.findByUserIdAndMediaId(UUID.randomUUID(), mediaId).isPresent() ? 1 : 0;
         Optional<MediaStatsEntity> stats = mediaStatsRepository.findById(mediaId);
 
-        return ResponseEntity.ok(Map.of(
-                "tracking", Map.of("id", mediaId),
-                "caches", List.of(),
-                "stats", stats.orElse(null),
-                "aggregations", Map.of(
-                        "totalRatings", totalRatings,
-                        "writtenReviews", 0,
-                        "deepReviews", 0,
-                        "watchlistInclusions", watchlistInclusions
-                ),
-                "logs", List.of()
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("tracking", Map.of("id", mediaId));
+        resp.put("caches", List.of());
+        resp.put("stats", stats.orElse(null));
+        resp.put("aggregations", Map.of(
+                "totalRatings", totalRatings,
+                "writtenReviews", 0,
+                "deepReviews", 0,
+                "watchlistInclusions", watchlistInclusions
         ));
+        resp.put("logs", List.of());
+
+        return ResponseEntity.ok(resp);
     }
 
     @GetMapping("/admin/cache/summary")
@@ -282,15 +283,16 @@ public class AdminController {
         long expired = apiCacheRepository.countByExpiresAtBefore(now);
         long total = fresh + expired;
 
-        return ResponseEntity.ok(Map.of(
-                "totalEntries", total,
-                "expiredEntries", expired,
-                "freshEntries", fresh,
-                "oldestExpiredAgeSeconds", null,
-                "byProvider", Map.of(),
-                "byType", Map.of(),
-                "lastCleanupLog", null
-        ));
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("totalEntries", total);
+        resp.put("expiredEntries", expired);
+        resp.put("freshEntries", fresh);
+        resp.put("oldestExpiredAgeSeconds", null);
+        resp.put("byProvider", Map.of());
+        resp.put("byType", Map.of());
+        resp.put("lastCleanupLog", null);
+
+        return ResponseEntity.ok(resp);
     }
 
     @PostMapping("/admin/cache/cleanup")
