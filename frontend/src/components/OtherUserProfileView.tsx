@@ -34,7 +34,7 @@ interface OtherUserProfileViewProps {
   ratings: any[];
   activities: any[];
   badges: any[];
-  statsCache: any[];
+  statsCache?: any;
   canViewProfile: boolean;
   canViewRatings: boolean;
   canViewActivity: boolean;

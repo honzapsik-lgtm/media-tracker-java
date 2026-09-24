@@ -68,7 +68,12 @@ export default async function ProfilePage() {
 
   const badges = (profile.badges || []).map((b: string) => ({ badge_id: b, unlocked_at: new Date().toISOString() }));
   const totalCount = ratingsData.count || formattedData.length;
-  const statsCache = profile.stats || {};
+  const statsCache = Array.isArray(profile.stats)
+    ? profile.stats
+    : Object.entries(profile.stats || {}).map(([mediaType, statsJson]) => ({
+        media_type: mediaType,
+        stats_json: statsJson,
+      }));
 
   return (
     <main className="min-h-screen bg-gray-950 text-white pt-24 pb-12 px-8">

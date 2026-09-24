@@ -86,7 +86,7 @@ export default async function UserProfilePage({
         ratings={formattedRatings}
         activities={[]}
         badges={badges}
-        statsCache={profile.stats}
+        statsCache={Array.isArray(profile.stats) ? profile.stats : Object.entries(profile.stats || {}).map(([mediaType, statsJson]) => ({ media_type: mediaType, stats_json: statsJson }))}
         canViewProfile={true}
         canViewRatings={true}
         canViewActivity={true}

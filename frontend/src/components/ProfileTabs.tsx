@@ -43,7 +43,7 @@ export default function ProfileTabs({
   initialData: ProfileItem[], 
   initialCount: number,
   userBadges?: UserBadge[],
-  statsCache?: any[]
+  statsCache?: any
 }) {
   const [activeTab, setActiveTab] = useState<'ratings' | 'reviews' | 'top100' | 'stats' | 'achievements' | 'friends'>('ratings');
   const [page, setPage] = useState(1);
@@ -122,13 +122,23 @@ export default function ProfileTabs({
   let minScore = 100;
   const distribution = [0,0,0,0,0];
 
-  statsCache.forEach(cache => {
+  const statsList: Array<{ media_type?: string; stats_json?: any }> = Array.isArray(statsCache)
+    ? statsCache
+    : statsCache && typeof statsCache === "object"
+    ? Object.entries(statsCache).map(([mediaType, statsJson]) => ({
+        media_type: mediaType,
+        stats_json: statsJson,
+      }))
+    : [];
+
+  statsList.forEach(cache => {
     const json = cache.stats_json || {};
     totalRatingCount += (json.total_count || 0);
     sumAvg += (json.average_score || 0) * (json.total_count || 0);
     
-    if (cache.media_type === "game") gameCount += (json.total_count || 0);
-    if (cache.media_type === "manga") mangaCount += (json.total_count || 0);
+    const mediaTypeLower = (cache.media_type || "").toLowerCase();
+    if (mediaTypeLower === "game") gameCount += (json.total_count || 0);
+    if (mediaTypeLower === "manga") mangaCount += (json.total_count || 0);
     
     if (json.highest_score > maxScore) maxScore = json.highest_score;
     if (json.lowest_score < minScore && json.lowest_score > 0) minScore = json.lowest_score;
