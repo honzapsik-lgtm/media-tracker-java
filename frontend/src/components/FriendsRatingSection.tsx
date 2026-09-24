@@ -8,14 +8,19 @@ import { Users, Star, MessageSquare } from "lucide-react";
 interface FriendRating {
   id: string;
   score: number;
-  review_text: string | null;
-  created_at: string;
-  user: {
-    id: string;
-    name: string | null;
-    username: string | null;
-    image: string | null;
-  };
+  review_text?: string | null;
+  reviewText?: string | null;
+  created_at?: string;
+  createdAt?: string;
+  userId?: string;
+  username?: string | null;
+  avatarUrl?: string | null;
+  user?: {
+    id?: string;
+    name?: string | null;
+    username?: string | null;
+    image?: string | null;
+  } | null;
 }
 
 const getScoreBadgeClass = (score: number) => {
@@ -84,8 +89,13 @@ export default function FriendsRatingSection({ mediaId }: { mediaId: string }) {
 
       <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
         {ratings.map((item) => {
-          const profileLink = item.user.username ? `/user/${item.user.username}` : `/user/${item.user.id}`;
-          const displayName = item.user.name || item.user.username || "Friend";
+          const user = item.user;
+          const username = user?.username || item.username;
+          const userId = user?.id || item.userId || item.id;
+          const profileLink = username ? `/user/${username}` : `/user/${userId}`;
+          const displayName = user?.name || user?.username || item.username || "Friend";
+          const avatar = user?.image || item.avatarUrl;
+          const review = item.review_text || item.reviewText;
 
           return (
             <div
@@ -97,9 +107,9 @@ export default function FriendsRatingSection({ mediaId }: { mediaId: string }) {
                   href={profileLink}
                   className="flex items-center gap-2.5 min-w-0 group hover:opacity-90 transition-opacity"
                 >
-                  {item.user.image ? (
+                  {avatar ? (
                     <img
-                      src={item.user.image}
+                      src={avatar}
                       alt={displayName}
                       className="w-7 h-7 rounded-full object-cover border border-zinc-700"
                     />
@@ -112,9 +122,9 @@ export default function FriendsRatingSection({ mediaId }: { mediaId: string }) {
                     <p className="text-xs font-semibold text-zinc-200 group-hover:text-blue-400 truncate transition-colors">
                       {displayName}
                     </p>
-                    {item.user.username && (
+                    {username && (
                       <p className="text-[11px] text-zinc-500 font-mono truncate">
-                        @{item.user.username}
+                        @{username}
                       </p>
                     )}
                   </div>
@@ -129,10 +139,10 @@ export default function FriendsRatingSection({ mediaId }: { mediaId: string }) {
                 </div>
               </div>
 
-              {item.review_text && (
+              {review && (
                 <div className="flex items-start gap-1.5 pt-1.5 border-t border-zinc-800/60 text-xs text-zinc-400 italic">
                   <MessageSquare className="w-3.5 h-3.5 shrink-0 mt-0.5 text-zinc-500" />
-                  <p className="line-clamp-2">{item.review_text}</p>
+                  <p className="line-clamp-2">{review}</p>
                 </div>
               )}
             </div>

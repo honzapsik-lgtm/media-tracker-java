@@ -249,11 +249,15 @@ export default function FriendActivityFeed() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-5">
           {activities.map((act) => {
-            const userProfileLink = act.user.username
-              ? `/user/${act.user.username}`
-              : `/user/${act.user.id}`;
+            const user = act.user;
+            const username = user?.username;
+            const userProfileLink = username
+              ? `/user/${username}`
+              : user?.id
+              ? `/user/${user.id}`
+              : `/user/${act.user_id}`;
             const isSelf = act.user_id === session.user.id;
-            const displayName = act.user.name || act.user.username || "User";
+            const displayName = user?.name || user?.username || "User";
 
             return (
               <div

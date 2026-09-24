@@ -93,9 +93,9 @@ public class RatingController {
 
     @GetMapping("/ratings/friends")
     @Operation(summary = "Get ratings from friends for a given media item")
-    public ResponseEntity<List<UserRatingEntity>> getFriendRatings(@RequestParam String mediaId) {
+    public ResponseEntity<List<Map<String, Object>>> getFriendRatings(@RequestParam String mediaId) {
         UUID currentUserId = SecurityUtils.getCurrentUserId().orElse(null);
-        List<UserRatingEntity> list = ratingService.getFriendRatings(currentUserId, mediaId);
+        List<Map<String, Object>> list = ratingService.getFriendRatings(currentUserId, mediaId);
         return ResponseEntity.ok(list);
     }
 

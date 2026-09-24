@@ -167,7 +167,7 @@ public class RatingService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserRatingEntity> getFriendRatings(UUID currentUserId, String mediaId) {
+    public List<Map<String, Object>> getFriendRatings(UUID currentUserId, String mediaId) {
         if (currentUserId == null || mediaId == null) return List.of();
 
         List<FriendshipEntity> friendships = friendshipRepository.findAcceptedFriendships(currentUserId);
@@ -189,7 +189,50 @@ public class RatingService {
 
         if (friendIds.isEmpty()) return List.of();
 
-        return userRatingRepository.findByUserIdInAndMediaId(friendIds, mediaId);
+        List<UserRatingEntity> ratings = userRatingRepository.findByUserIdInAndMediaId(friendIds, mediaId);
+        if (ratings.isEmpty()) return List.of();
+
+        Map<UUID, UserEntity> usersById = new HashMap<>();
+        userRepository.findAllById(ratings.stream().map(UserRatingEntity::getUserId).toList())
+                .forEach(u -> usersById.put(u.getId(), u));
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (UserRatingEntity r : ratings) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", r.getId());
+            map.put("userId", r.getUserId());
+            map.put("mediaId", r.getMediaId());
+            map.put("score", r.getScore());
+            map.put("isDeepReview", r.getIsDeepReview());
+            map.put("criteriaScores", r.getCriteriaScores());
+            map.put("reviewText", r.getReviewText());
+            map.put("review_text", r.getReviewText());
+            map.put("mediaTitle", r.getMediaTitle());
+            map.put("mediaImage", r.getMediaImage());
+            map.put("mediaReleaseDate", r.getMediaReleaseDate());
+            map.put("createdAt", r.getCreatedAt() != null ? r.getCreatedAt().toString() : null);
+            map.put("created_at", r.getCreatedAt() != null ? r.getCreatedAt().toString() : null);
+            map.put("username", r.getUsername());
+            map.put("avatarUrl", r.getAvatarUrl());
+
+            UserEntity user = usersById.get(r.getUserId());
+            Map<String, Object> userMap = new HashMap<>();
+            if (user != null) {
+                userMap.put("id", user.getId().toString());
+                userMap.put("name", user.getName());
+                userMap.put("username", user.getUsername());
+                userMap.put("image", user.getImage());
+            } else {
+                userMap.put("id", r.getUserId().toString());
+                userMap.put("name", r.getUsername());
+                userMap.put("username", r.getUsername());
+                userMap.put("image", r.getAvatarUrl());
+            }
+            map.put("user", userMap);
+
+            result.add(map);
+        }
+        return result;
     }
 
     @Transactional(readOnly = true)
