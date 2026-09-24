@@ -274,13 +274,20 @@ export default function FriendActivityFeed() {
                       <img
                         src={act.media_image}
                         alt={act.media_title || "Media"}
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          target.style.display = "none";
+                          const fallback = target.nextElementSibling as HTMLElement;
+                          if (fallback) fallback.style.display = "flex";
+                        }}
                         className="w-14 h-20 rounded-xl object-cover border border-zinc-700/60 shadow-md group-hover/media:opacity-80 transition-opacity"
                       />
-                    ) : (
-                      <div className="w-14 h-20 rounded-xl bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-500">
-                        <Film className="w-6 h-6" />
-                      </div>
-                    )}
+                    ) : null}
+                    <div
+                      className={`w-14 h-20 rounded-xl bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-500 ${act.media_image ? "hidden" : "flex"}`}
+                    >
+                      <Film className="w-6 h-6" />
+                    </div>
                   </Link>
                 ) : null}
 
