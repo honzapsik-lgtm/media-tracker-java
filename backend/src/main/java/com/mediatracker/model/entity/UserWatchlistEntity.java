@@ -3,6 +3,8 @@ package com.mediatracker.model.entity;
 import com.mediatracker.model.enums.MediaType;
 import com.mediatracker.model.enums.WatchlistStatus;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -29,6 +31,7 @@ public class UserWatchlistEntity {
     private String mediaImage;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "status", nullable = false)
     private WatchlistStatus status = WatchlistStatus.PLANNING;
 
@@ -66,6 +69,7 @@ public class UserWatchlistEntity {
     private Integer watchCount = 0;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "media_type")
     private MediaType mediaType;
 

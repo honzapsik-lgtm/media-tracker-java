@@ -3,7 +3,9 @@ package com.mediatracker.model.entity;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mediatracker.model.enums.MediaType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcType;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
@@ -20,6 +22,7 @@ public class UserStatsCacheEntity {
 
     @Id
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "media_type", nullable = false)
     private MediaType mediaType;
 

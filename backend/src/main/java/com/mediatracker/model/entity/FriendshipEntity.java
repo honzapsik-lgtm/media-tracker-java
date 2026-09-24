@@ -2,6 +2,8 @@ package com.mediatracker.model.entity;
 
 import com.mediatracker.model.enums.FriendshipStatus;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -22,6 +24,7 @@ public class FriendshipEntity {
     private UUID receiverId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "status", nullable = false)
     private FriendshipStatus status = FriendshipStatus.PENDING;
 

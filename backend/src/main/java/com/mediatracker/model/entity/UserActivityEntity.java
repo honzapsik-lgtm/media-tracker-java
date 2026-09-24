@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.mediatracker.model.enums.ActivityType;
 import com.mediatracker.model.enums.MediaType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcType;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
@@ -23,6 +25,7 @@ public class UserActivityEntity {
     private UUID userId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "type", nullable = false)
     private ActivityType type;
 
@@ -36,6 +39,7 @@ public class UserActivityEntity {
     private String mediaImage;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "media_type")
     private MediaType mediaType;
 

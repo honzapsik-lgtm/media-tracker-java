@@ -2,6 +2,8 @@ package com.mediatracker.model.entity;
 
 import com.mediatracker.model.enums.VisibilityLevel;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -19,18 +21,22 @@ public class UserPrivacySettingsEntity {
     private UUID userId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "profile_visibility", nullable = false)
     private VisibilityLevel profileVisibility = VisibilityLevel.PUBLIC;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "ratings_visibility", nullable = false)
     private VisibilityLevel ratingsVisibility = VisibilityLevel.PUBLIC;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "watchlist_visibility", nullable = false)
     private VisibilityLevel watchlistVisibility = VisibilityLevel.PUBLIC;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "activity_visibility", nullable = false)
     private VisibilityLevel activityVisibility = VisibilityLevel.PUBLIC;
 

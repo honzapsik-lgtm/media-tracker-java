@@ -2,6 +2,8 @@ package com.mediatracker.model.entity;
 
 import com.mediatracker.model.enums.MediaType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -25,6 +27,7 @@ public class UserListEntity {
     private String description;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "media_type", nullable = false)
     private MediaType mediaType;
 

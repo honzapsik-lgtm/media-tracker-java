@@ -2,6 +2,8 @@ package com.mediatracker.model.entity;
 
 import com.mediatracker.model.enums.MediaType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 @Entity
 @Table(name = "global_rankings")
@@ -12,6 +14,7 @@ public class GlobalRankingEntity {
     private String mediaId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "media_type", nullable = false)
     private MediaType mediaType;
 

@@ -2,6 +2,9 @@ package com.mediatracker.model.entity;
 
 import com.mediatracker.model.enums.MediaType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
 import java.math.BigDecimal;
 
 @Entity
@@ -19,6 +22,7 @@ public class MediaStatsEntity {
     private Integer totalRatings = 0;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "media_type", nullable = false)
     private MediaType mediaType;
 

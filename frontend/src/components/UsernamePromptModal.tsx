@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { User, Check, AlertCircle, Loader2 } from "lucide-react";
 
 export default function UsernamePromptModal() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const [username, setUsername] = useState("");
   const [checking, setChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
@@ -83,7 +83,12 @@ export default function UsernamePromptModal() {
         throw new Error(data.error || "Failed to set nickname");
       }
 
-      // Reload page to refresh the NextAuth session with the new username
+      // Update NextAuth session with the new username
+      try {
+        await update({ username: clean });
+      } catch (e) {
+        console.error("Session update error:", e);
+      }
       window.location.reload();
     } catch (err: any) {
       setError(err.message || "Failed to set nickname.");
