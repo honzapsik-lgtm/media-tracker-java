@@ -65,18 +65,11 @@ public class CustomListController {
     @GetMapping("/{id}")
     @Operation(summary = "Get custom list with items by id")
     public ResponseEntity<?> getListById(@PathVariable UUID id) {
-        return listService.getListById(id).map(list -> {
-            List<UserListItemEntity> items = listService.getListItems(id);
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", list.getId());
-            map.put("userId", list.getUserId());
-            map.put("title", list.getTitle());
-            map.put("mediaType", list.getMediaType());
-            map.put("items", items);
-            map.put("createdAt", list.getCreatedAt());
-            map.put("updatedAt", list.getUpdatedAt());
-            return ResponseEntity.ok((Object) map);
-        }).orElseGet(() -> ResponseEntity.notFound().build());
+        Map<String, Object> details = listService.getListDetails(id);
+        if (details == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(details);
     }
 
     public record UpdateItemsRequest(List<Map<String, Object>> mediaIds) {}

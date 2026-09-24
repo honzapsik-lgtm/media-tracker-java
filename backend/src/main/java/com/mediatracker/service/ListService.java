@@ -3,8 +3,10 @@ package com.mediatracker.service;
 import com.mediatracker.model.entity.UserListEntity;
 import com.mediatracker.model.entity.UserListItemEntity;
 import com.mediatracker.model.enums.MediaType;
+import com.mediatracker.model.entity.UserRatingEntity;
 import com.mediatracker.repository.UserListItemRepository;
 import com.mediatracker.repository.UserListRepository;
+import com.mediatracker.repository.UserRatingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,10 +18,14 @@ public class ListService {
 
     private final UserListRepository userListRepository;
     private final UserListItemRepository userListItemRepository;
+    private final UserRatingRepository userRatingRepository;
 
-    public ListService(UserListRepository userListRepository, UserListItemRepository userListItemRepository) {
+    public ListService(UserListRepository userListRepository,
+                       UserListItemRepository userListItemRepository,
+                       UserRatingRepository userRatingRepository) {
         this.userListRepository = userListRepository;
         this.userListItemRepository = userListItemRepository;
+        this.userRatingRepository = userRatingRepository;
     }
 
     public List<Map<String, Object>> getUserLists(UUID userId, MediaType mediaType) {
@@ -50,6 +56,73 @@ public class ListService {
         return userListItemRepository.findByListIdOrderByRankPositionAsc(listId);
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Object> getListDetails(UUID listId) {
+        Optional<UserListEntity> listOpt = userListRepository.findById(listId);
+        if (listOpt.isEmpty()) return null;
+        UserListEntity list = listOpt.get();
+
+        List<UserListItemEntity> items = userListItemRepository.findByListIdOrderByRankPositionAsc(listId);
+        List<String> mediaIds = items.stream().map(UserListItemEntity::getMediaId).toList();
+
+        Map<String, UserRatingEntity> ratingsByMedia = new HashMap<>();
+        if (!mediaIds.isEmpty()) {
+            List<UserRatingEntity> ratings = userRatingRepository.findByUserIdAndMediaIdIn(list.getUserId(), mediaIds);
+            for (UserRatingEntity r : ratings) {
+                ratingsByMedia.put(r.getMediaId(), r);
+            }
+        }
+
+        List<Map<String, Object>> formattedItems = new ArrayList<>();
+        for (UserListItemEntity item : items) {
+            Map<String, Object> itemMap = new HashMap<>();
+            UserRatingEntity rating = ratingsByMedia.get(item.getMediaId());
+
+            itemMap.put("id", item.getId());
+            itemMap.put("listId", item.getListId());
+            itemMap.put("mediaId", item.getMediaId());
+            itemMap.put("rankPosition", item.getRankPosition());
+            itemMap.put("mediaTitle", item.getMediaTitle());
+            itemMap.put("mediaImage", item.getMediaImage());
+
+            String title = item.getMediaTitle() != null ? item.getMediaTitle()
+                    : rating != null && rating.getMediaTitle() != null ? rating.getMediaTitle()
+                    : "Unknown Title";
+            String image = item.getMediaImage() != null ? item.getMediaImage()
+                    : rating != null ? rating.getMediaImage()
+                    : null;
+            String releaseDate = rating != null ? rating.getMediaReleaseDate() : null;
+
+            itemMap.put("title", title);
+            itemMap.put("image", image);
+            itemMap.put("type", list.getMediaType() != null ? list.getMediaType().name().toLowerCase() : "show");
+            itemMap.put("score", rating != null && rating.getScore() != null ? rating.getScore() : 0);
+            itemMap.put("hasRated", rating != null);
+            itemMap.put("reviewText", rating != null ? rating.getReviewText() : null);
+            itemMap.put("releaseDate", releaseDate);
+            if (rating != null && rating.getCriteriaScores() != null) {
+                itemMap.put("criteriaScores", rating.getCriteriaScores());
+            }
+
+            formattedItems.add(itemMap);
+        }
+
+        Map<String, Object> listMap = new HashMap<>();
+        listMap.put("id", list.getId());
+        listMap.put("userId", list.getUserId());
+        listMap.put("user_id", list.getUserId());
+        listMap.put("title", list.getTitle());
+        listMap.put("mediaType", list.getMediaType());
+        listMap.put("media_type", list.getMediaType() != null ? list.getMediaType().name().toLowerCase() : "show");
+        listMap.put("createdAt", list.getCreatedAt());
+        listMap.put("updatedAt", list.getUpdatedAt());
+
+        Map<String, Object> result = new HashMap<>(listMap);
+        result.put("list", listMap);
+        result.put("items", formattedItems);
+        return result;
+    }
+
     @Transactional
     public UserListEntity createList(UUID userId, String title, MediaType mediaType) {
         UserListEntity list = new UserListEntity();
@@ -75,8 +148,10 @@ public class ListService {
             for (int i = 0; i < mediaItems.size(); i++) {
                 Map<String, Object> item = mediaItems.get(i);
                 String mediaId = String.valueOf(item.getOrDefault("id", item.get("mediaId")));
-                String title = item.containsKey("title") && item.get("title") != null ? String.valueOf(item.get("title")) : null;
-                String image = item.containsKey("image") && item.get("image") != null ? String.valueOf(item.get("image")) : null;
+                String title = item.get("title") != null ? String.valueOf(item.get("title"))
+                        : item.get("mediaTitle") != null ? String.valueOf(item.get("mediaTitle")) : null;
+                String image = item.get("image") != null ? String.valueOf(item.get("image"))
+                        : item.get("mediaImage") != null ? String.valueOf(item.get("mediaImage")) : null;
 
                 UserListItemEntity li = new UserListItemEntity();
                 li.setListId(listId);

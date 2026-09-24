@@ -43,6 +43,13 @@ export default function MediaCardProfileHorizontal({
   const [showListModal, setShowListModal] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
 
+  const anyItem = item as any;
+  const title = item.title || anyItem.mediaTitle || anyItem.media_title || "Unknown Title";
+  const image = item.image || anyItem.mediaImage || anyItem.media_image || null;
+  const releaseDate = item.releaseDate || anyItem.mediaReleaseDate || anyItem.media_release_date || null;
+  const type = item.type || anyItem.mediaType || anyItem.media_type || "";
+  const score = item.score !== undefined && item.score !== null ? item.score : (anyItem.userScore ?? null);
+
   const hasCriteria = item.criteriaScores && Object.keys(item.criteriaScores).length > 0;
   
   return (
@@ -62,8 +69,8 @@ export default function MediaCardProfileHorizontal({
       
       {/* Thumbnail */}
       <Link href={`/media/${item.mediaId}`} className="shrink-0 block">
-        {item.image ? (
-          <img src={item.image} className="w-12 h-16 object-cover rounded-md shadow-md" alt={item.title || "Cover"} />
+        {image ? (
+          <img src={image} className="w-12 h-16 object-cover rounded-md shadow-md" alt={title || "Cover"} />
         ) : (
           <div className="w-12 h-16 bg-gray-950 border border-gray-800 rounded-md flex items-center justify-center text-[9px] font-bold text-gray-600 text-center">NO IMG</div>
         )}
@@ -73,14 +80,16 @@ export default function MediaCardProfileHorizontal({
       <div className="flex-1 min-w-0">
         <Link href={`/media/${item.mediaId}`} className="block">
           <p className="text-lg font-bold text-gray-200 truncate group-hover:text-white">
-            {item.title || "Unknown Title"}
+            {title}
           </p>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-gray-950 text-gray-500 border border-gray-800/60 leading-none flex items-center">
-              {item.type}
-            </span>
+            {type && (
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-gray-950 text-gray-500 border border-gray-800/60 leading-none flex items-center">
+                {type}
+              </span>
+            )}
             <span className="text-gray-500 text-xs font-medium leading-none flex items-center">
-              {item.releaseDate ? item.releaseDate.split('-')[0] : 'N/A'}
+              {releaseDate ? releaseDate.split('-')[0] : 'N/A'}
             </span>
           </div>
         </Link>
@@ -101,7 +110,7 @@ export default function MediaCardProfileHorizontal({
           </div>
         )}
 
-        {(item.hasRated === false || item.score === 0 || item.score === null) && viewContext === "lists" && (
+        {(item.hasRated === false || score === 0 || score === null) && viewContext === "lists" && (
           <div className="flex items-center justify-center border-r border-gray-800 pr-4">
             <button 
               onClick={() => setShowRatingModal(true)}
@@ -127,8 +136,8 @@ export default function MediaCardProfileHorizontal({
         {/* Right Stats Block: Always My Score */}
         <div className="text-right w-16">
           <p className="text-[9px] text-blue-500 uppercase font-bold tracking-widest mb-1">My Score</p>
-          <p className={`font-black text-base ${getScoreColor(item.score)}`}>
-            {item.score}%
+          <p className={`font-black text-base ${getScoreColor(score)}`}>
+            {score !== null && score !== undefined ? `${score}%` : "-"}
           </p>
         </div>
       </div>

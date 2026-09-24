@@ -106,8 +106,8 @@ export default function CustomListsManager() {
         body: JSON.stringify({
           mediaIds: items.map((item) => ({
             id: item.mediaId,
-            title: item.title,
-            image: item.image,
+            title: item.title || item.mediaTitle,
+            image: item.image || item.mediaImage,
           })),
         }),
       });
