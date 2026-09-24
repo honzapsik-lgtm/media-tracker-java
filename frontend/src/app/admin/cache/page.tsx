@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AdminNav } from "@/app/admin/admin-nav";
 import { AdminBadge } from "@/components/admin/AdminBadge";
+import { FlushCacheButton } from "@/components/admin/FlushCacheButton";
 import { getCacheSummary, getPaginatedCacheEntries, parseBooleanFilter } from "@/lib/admin-cache";
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { ADMIN_CACHE_CLEANUP_CONFIRM_TEXT, ADMIN_DEFAULT_PAGE_SIZE, ADMIN_MAX_PAGE_SIZE } from "@/lib/admin-constants";
@@ -127,19 +128,22 @@ export default async function AdminCachePage({
             <p className="text-gray-400">Inspect ApiCache entries and remove expired provider cache rows.</p>
             <p className="mt-2 text-sm text-gray-500">Last refreshed: {lastRefreshed.toLocaleString()}</p>
           </div>
-          <form action="/api/admin/cache/cleanup" method="post" className="min-w-full space-y-2 lg:min-w-80">
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">
-              Confirmation
-              <input
-                name="confirm"
-                placeholder={ADMIN_CACHE_CLEANUP_CONFIRM_TEXT}
-                className="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-3 py-2 text-sm normal-case tracking-normal text-white outline-none focus:border-blue-500"
-              />
-            </label>
-            <button className="rounded bg-red-600 px-5 py-2 text-sm font-black text-white hover:bg-red-500">
-              Delete expired cache
-            </button>
-          </form>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-4">
+            <FlushCacheButton />
+            <form action="/api/admin/cache/cleanup" method="post" className="space-y-2 min-w-full sm:min-w-72">
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">
+                Confirmation
+                <input
+                  name="confirm"
+                  placeholder={ADMIN_CACHE_CLEANUP_CONFIRM_TEXT}
+                  className="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-3 py-2 text-sm normal-case tracking-normal text-white outline-none focus:border-blue-500"
+                />
+              </label>
+              <button className="w-full rounded bg-red-600 px-5 py-2 text-sm font-black text-white hover:bg-red-500">
+                Delete expired cache
+              </button>
+            </form>
+          </div>
         </div>
 
         <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -28,6 +28,7 @@ interface WatchlistItem {
 export default function AppDrawer() {
   const router = useRouter();
   const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "admin";
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   
@@ -37,7 +38,8 @@ export default function AppDrawer() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [activeTab, setActiveTab] = useState("PLANNING");
   const [isLoading, setIsLoading] = useState(false);
-  const [isWipingDb, setIsWipingDb] = useState(false);
+  const [isFlushingCache, setIsFlushingCache] = useState(false);
+  const [isNukingDb, setIsNukingDb] = useState(false);
 
   const fetchWatchlist = async () => {
     setIsLoading(true);
@@ -117,35 +119,45 @@ export default function AppDrawer() {
     }
   };
 
-  const handleWipeDb = async () => {
-    const confirmText = "WIPE LOCAL APP DATA";
-    const confirmation = window.prompt(
-      `Wipe all local app data? Auth users will stay, but ratings, reviews, lists, stats, caches, jobs, badges, and badge showcases will be cleared.\n\nType ${confirmText} to continue.`
-    );
-
-    if (confirmation !== confirmText) {
+  const handleFlushAllCache = async () => {
+    if (!window.confirm("Are you sure you want to delete the entire cache? All cached provider responses will be cleared.")) {
       return;
     }
 
-    setIsWipingDb(true);
+    setIsFlushingCache(true);
     try {
-      const res = await fetch("/api/debug/wipe-db", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: confirmText }),
-      });
+      const res = await fetch("/api/admin/cache/flush-all", { method: "POST" });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Could not wipe database.");
+        throw new Error((await res.text()) || "Failed to flush cache");
       }
-
-      setWatchlist([]);
+      const data = await res.json().catch(() => ({}));
+      alert(`Cache flushed successfully. Deleted ${data.deletedCount ?? 0} entries.`);
       router.refresh();
-      alert("Database wiped.");
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Could not wipe database.");
+    } catch (err: any) {
+      alert("Error flushing cache: " + err.message);
     } finally {
-      setIsWipingDb(false);
+      setIsFlushingCache(false);
+    }
+  };
+
+  const handleNukeDb = async () => {
+    if (!window.confirm("ARE YOU ABSOLUTELY SURE? This will delete ALL media, reviews, watchlists, logs, and background jobs. Only users will be preserved. THIS CANNOT BE UNDONE.")) {
+      return;
+    }
+
+    setIsNukingDb(true);
+    try {
+      const res = await fetch("/api/admin/nuke", { method: "POST" });
+      if (!res.ok) {
+        throw new Error((await res.text()) || "Failed to nuke database");
+      }
+      setWatchlist([]);
+      alert("Database nuked successfully.");
+      router.refresh();
+    } catch (err: any) {
+      alert("Error nuking database: " + err.message);
+    } finally {
+      setIsNukingDb(false);
     }
   };
 
@@ -240,26 +252,61 @@ export default function AppDrawer() {
                 <svg className="w-5 h-5 text-gray-600 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
 
-              {/* Db Wipe Button */}
-              <button 
-                onClick={handleWipeDb}
-                disabled={isWipingDb}
-                className="w-full flex items-center justify-between p-4 bg-red-950/20 border border-red-900/30 rounded-xl hover:bg-red-900/30 hover:border-red-500/50 transition-all group disabled:opacity-50"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-red-900/30 border border-red-500/50 rounded-lg flex items-center justify-center text-red-400">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                  </div>
-                  <span className="font-bold text-red-400 group-hover:text-red-300">Wipe All Local Data</span>
+              {/* Admin Actions (Visible only for admins) */}
+              {isAdmin && (
+                <div className="pt-4 mt-2 border-t border-gray-800/80 space-y-3">
+                  <p className="px-1 text-[11px] font-black uppercase tracking-wider text-gray-500">Admin Actions</p>
+
+                  {/* Delete Whole Cache Button */}
+                  <button
+                    onClick={handleFlushAllCache}
+                    disabled={isFlushingCache}
+                    className="w-full flex items-center justify-between p-3.5 bg-rose-950/20 border border-rose-900/30 rounded-xl hover:bg-rose-900/30 hover:border-rose-500/50 transition-all group disabled:opacity-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-rose-900/30 border border-rose-500/40 rounded-lg flex items-center justify-center text-rose-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <span className="block text-sm font-bold text-rose-400 group-hover:text-rose-300">
+                          {isFlushingCache ? "Flushing Cache..." : "Delete Entire Cache"}
+                        </span>
+                        <span className="block text-[10px] text-gray-500">Purge all cached provider data</span>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Nuke Database Button */}
+                  <button
+                    onClick={handleNukeDb}
+                    disabled={isNukingDb}
+                    className="w-full flex items-center justify-between p-3.5 bg-red-950/40 border border-red-900/50 rounded-xl hover:bg-red-900/50 hover:border-red-500/70 transition-all group disabled:opacity-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-red-900/40 border border-red-500/60 rounded-lg flex items-center justify-center text-red-300">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <span className="block text-sm font-black text-red-400 group-hover:text-red-300">
+                          {isNukingDb ? "Nuking Database..." : "Nuke Database"}
+                        </span>
+                        <span className="block text-[10px] text-gray-500">Wipe all media, stats & jobs</span>
+                      </div>
+                    </div>
+                  </button>
                 </div>
-              </button>
+              )}
             </div>
 
             {/* LOGOUT BUTTON PINNED TO BOTTOM */}
             {session && (
               <div className="p-4 border-t border-gray-800 bg-gray-900/30 space-y-3">
                 {/* Admin Panel Button */}
-                {(session.user as any)?.role === "admin" && (
+                {isAdmin && (
                   <button
                     onClick={() => { handleClose(); router.push('/admin'); }}
                     className="w-full flex items-center justify-center gap-2 p-3 text-sm font-bold text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 border border-blue-500/20 rounded-xl transition-all"

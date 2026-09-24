@@ -303,4 +303,12 @@ public class AdminController {
         apiCacheRepository.deleteByExpiresAtBefore(now);
         return ResponseEntity.ok(Map.of("deleted", expiredCount));
     }
+
+    @PostMapping("/admin/cache/flush-all")
+    @Operation(summary = "Flush all cache records")
+    public ResponseEntity<?> flushAllCache() {
+        long count = apiCacheRepository.count();
+        apiCacheRepository.deleteAllInBatch();
+        return ResponseEntity.ok(Map.of("deleted", count));
+    }
 }
