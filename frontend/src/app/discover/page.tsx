@@ -3,6 +3,8 @@ import DiscoverFilters from "@/components/DiscoverFilters";
 import Link from "next/link";
 import type { DiscoverMediaItem } from "@/app/actions";
 import MediaCardVertical from "@/components/MediaCardVertical";
+import TwinTasteRecommendations from "@/components/TwinTasteRecommendations";
+import { getRecommendations } from "@/lib/api-client";
 
 // Force Next.js to always fetch fresh Database scores instead of caching the page
 export const dynamic = "force-dynamic";
@@ -28,7 +30,11 @@ export default async function DiscoverPage({
   const year = params.year || "";
   const sort = params.sort || "popular";
 
-  const results = await discoverMedia(type, genre, year, sort);
+  const [results, recommendations] = await Promise.all([
+    discoverMedia(type, genre, year, sort),
+    getRecommendations().catch(() => null),
+  ]);
+
   const statsMap: Record<string, number> = {};
   const rankMap: Record<string, number> = {};
 
@@ -37,7 +43,12 @@ export default async function DiscoverPage({
       <div className="max-w-7xl mx-auto px-8">
         <h1 className="text-4xl font-black mb-8">Discover</h1>
         
-        <DiscoverFilters />
+        <TwinTasteRecommendations data={recommendations} />
+
+        <div className="mt-8 mb-6">
+          <h2 className="text-2xl font-bold tracking-wide text-gray-100 mb-4">Browse Catalog</h2>
+          <DiscoverFilters />
+        </div>
 
         {!results || results.length === 0 ? (
           <div className="text-center py-20 bg-gray-900/50 rounded-2xl border border-gray-800 border-dashed">

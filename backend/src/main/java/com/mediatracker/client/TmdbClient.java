@@ -278,6 +278,53 @@ public class TmdbClient {
         }
     }
 
+    public List<DiscoverItemDto> getRecommendations(int tmdbId, String type) {
+        if (apiKey == null || apiKey.isBlank()) return List.of();
+        String tmdbType = "tv".equalsIgnoreCase(type) || "show".equalsIgnoreCase(type) ? "tv" : "movie";
+        String cacheKey = "tmdb-rec-" + tmdbType + "-" + tmdbId;
+
+        Optional<List> cached = cacheService.get(cacheKey, List.class);
+        if (cached.isPresent()) {
+            return objectMapper.convertValue(cached.get(), objectMapper.getTypeFactory().constructCollectionType(List.class, DiscoverItemDto.class));
+        }
+
+        try {
+            String uri = String.format("%s/%s/%d/recommendations?api_key=%s&language=en-US&page=1",
+                    BASE_URL, tmdbType, tmdbId, apiKey);
+
+            JsonNode data = restClient.get().uri(uri).retrieve().body(JsonNode.class);
+            if (data == null || !data.has("results") || !data.get("results").isArray()) {
+                return List.of();
+            }
+
+            List<DiscoverItemDto> results = new ArrayList<>();
+            for (JsonNode item : data.get("results")) {
+                int id = item.path("id").asInt();
+                String title = item.hasNonNull("title") ? item.get("title").asText() : item.path("name").asText("Untitled");
+                String poster = item.path("poster_path").asText(null);
+                String backdrop = item.path("backdrop_path").asText(null);
+                String image = poster != null ? "https://image.tmdb.org/t/p/w500" + poster : backdrop != null ? "https://image.tmdb.org/t/p/w500" + backdrop : "";
+                double v = item.path("vote_average").asDouble(0.0);
+                String date = "movie".equals(tmdbType) ? item.path("release_date").asText(null) : item.path("first_air_date").asText(null);
+
+                results.add(new DiscoverItemDto(
+                        "tmdb-" + tmdbType + "-" + id,
+                        title,
+                        image,
+                        "movie".equals(tmdbType) ? "movie" : "show",
+                        (int) Math.round(v * 10),
+                        date
+                ));
+            }
+
+            cacheService.put(cacheKey, "tmdb", results, 24 * 3600);
+            return results;
+        } catch (Exception e) {
+            log.warn("TMDb recommendations request failed for {}-{}: {}", tmdbType, tmdbId, e.getMessage());
+            return List.of();
+        }
+    }
+
     public List<MediaItemDto> search(String query) {
         if (query == null || query.isBlank()) return List.of();
         String normalizedQuery = query.trim().toLowerCase();

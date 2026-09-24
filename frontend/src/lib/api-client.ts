@@ -82,6 +82,10 @@ export async function discoverMedia(
   return apiFetch<any[]>(`/discover?${params.toString()}`);
 }
 
+export async function getRecommendations() {
+  return apiFetch<any>("/discover/recommendations");
+}
+
 export async function searchMedia(query: string) {
   return apiFetch<any[]>(`/search?q=${encodeURIComponent(query)}`);
 }
