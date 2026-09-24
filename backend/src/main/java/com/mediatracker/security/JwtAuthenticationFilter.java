@@ -2,6 +2,7 @@ package com.mediatracker.security;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mediatracker.service.AuthService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,10 +16,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -28,6 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final ObjectMapper objectMapper;
+    private final AuthService authService;
 
     @Value("${app.jwt.secret:default-fallback-secret-for-development-change-in-production-123456}")
     private String jwtSecret;
@@ -35,8 +34,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Value("${app.gateway.secret:default-internal-secret-change-in-prod-123456}")
     private String gatewaySecret;
 
-    public JwtAuthenticationFilter(ObjectMapper objectMapper) {
+    public JwtAuthenticationFilter(ObjectMapper objectMapper, AuthService authService) {
         this.objectMapper = objectMapper;
+        this.authService = authService;
     }
 
     @Override
@@ -54,9 +54,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         } else if (gatewayKey != null && gatewayKey.equals(gatewaySecret)) {
             UUID userId = null;
             if (xUserId != null && !xUserId.isBlank()) {
-                try {
-                    userId = UUID.fromString(xUserId);
-                } catch (IllegalArgumentException ignored) {}
+                userId = authService.resolveUserId(xUserId).orElse(null);
             }
             String role = request.getHeader("X-User-Role");
             String email = request.getHeader("X-User-Email");
@@ -92,11 +90,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (sub == null) return;
 
-            UUID userId;
-            try {
-                userId = UUID.fromString(sub);
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid UUID in JWT sub: {}", sub);
+            UUID userId = authService.resolveUserId(sub).orElse(null);
+            if (userId == null) {
+                log.warn("Could not resolve userId from JWT sub: {}", sub);
                 return;
             }
 

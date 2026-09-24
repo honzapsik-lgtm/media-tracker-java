@@ -133,6 +133,27 @@ public class AuthService {
         return userRepository.findById(userId).map(this::toDto);
     }
 
+    @Transactional(readOnly = true)
+    public Optional<UUID> resolveUserId(String rawId) {
+        if (rawId == null || rawId.isBlank()) return Optional.empty();
+        try {
+            return Optional.of(UUID.fromString(rawId));
+        } catch (IllegalArgumentException e) {
+            // Non-UUID string: try resolving as OAuth providerAccountId
+            Optional<UUID> byAccount = accountRepository.findFirstByProviderAccountId(rawId)
+                    .map(AccountEntity::getUserId);
+            if (byAccount.isPresent()) {
+                return byAccount;
+            }
+
+            // Or by matching avatar image URL containing this providerAccountId
+            return userRepository.findAll().stream()
+                    .filter(u -> u.getImage() != null && u.getImage().contains(rawId))
+                    .map(UserEntity::getId)
+                    .findFirst();
+        }
+    }
+
     public AuthUserDto toDto(UserEntity user) {
         return new AuthUserDto(
                 user.getId(),
