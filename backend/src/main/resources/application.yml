@@ -37,7 +37,7 @@ spring:
 
 app:
   gateway:
-    secret: ${INTERNAL_GATEWAY_SECRET}
+    secret: ${INTERNAL_GATEWAY_SECRET:default-internal-secret-change-in-prod-123456}
   providers:
     tmdb:
       api-key: ${TMDB_API_KEY:}
