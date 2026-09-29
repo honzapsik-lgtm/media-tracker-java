@@ -138,12 +138,14 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
   let globalCriteriaAverages: Record<string, number> = {};
   let placementRank: number | null = null;
   let reviews: any[] = [];
+  let userRating: any = null;
 
   try {
     const ratingData = await getRatings(mediaId);
     if (ratingData?.stats) stats = ratingData.stats;
     if (ratingData?.globalCriteriaAverages) globalCriteriaAverages = ratingData.globalCriteriaAverages;
     if (Array.isArray(ratingData?.reviews)) reviews = ratingData.reviews;
+    if (ratingData?.personal) userRating = ratingData.personal;
   } catch {
     // API offline or not rated yet
   }
@@ -254,7 +256,15 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
             ) : (
               <div className="w-full aspect-[2/3] bg-gray-900 rounded-2xl border border-gray-800 flex items-center justify-center">No Image</div>
             )}
-            <RatingSlider mediaId={mediaId} mediaType={mediaTypeKey} mediaTitle={mediaDetails.title} mediaImage={mediaDetails.image} mediaReleaseDate={mediaDetails.releaseDate} />
+            <RatingSlider
+              mediaId={mediaId}
+              mediaType={mediaTypeKey}
+              mediaTitle={mediaDetails.title}
+              mediaImage={mediaDetails.image}
+              mediaReleaseDate={mediaDetails.releaseDate}
+              initialRating={userRating?.score}
+              initialCriteria={userRating?.criteriaScores || userRating?.criteria_scores}
+            />
             <FriendsRatingSection mediaId={mediaId} />
 
             {/* WHERE TO STREAM */}

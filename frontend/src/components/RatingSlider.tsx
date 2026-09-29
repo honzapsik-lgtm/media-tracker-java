@@ -31,12 +31,28 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
   const isDeepReview = true;
   
   const [criteria, setCriteria] = useState<Record<string, number>>(() => {
-    if (initialCriteria && Object.keys(initialCriteria).length > 0) return initialCriteria;
     const config = CRITERIA_CONFIG[mediaType] || [];
     const initial: Record<string, number> = {};
     config.forEach((item) => { initial[item.key] = 50; });
+    if (initialCriteria && Object.keys(initialCriteria).length > 0) {
+      return { ...initial, ...initialCriteria };
+    }
     return initial;
   });
+
+  useEffect(() => {
+    if (initialCriteria && Object.keys(initialCriteria).length > 0) {
+      setCriteria(prev => ({ ...prev, ...initialCriteria }));
+      setHasRated(true);
+    }
+  }, [initialCriteria]);
+
+  useEffect(() => {
+    if (typeof initialRating === "number" && initialRating !== 50) {
+      setRating(initialRating);
+      setHasRated(true);
+    }
+  }, [initialRating]);
 
   const [globalCriteriaAverages, setGlobalCriteriaAverages] = useState<Record<string, number>>({});
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -48,15 +64,22 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
       const res = await fetch(`/api/ratings?mediaId=${encodeURIComponent(mediaId)}`);
       if (!res.ok) return;
       const data = await res.json() as {
-        personal?: { score: number; is_deep_review: boolean | null; criteria_scores: Record<string, number> | null } | null;
+        personal?: {
+          score: number;
+          is_deep_review?: boolean | null;
+          isDeepReview?: boolean | null;
+          criteria_scores?: Record<string, number> | null;
+          criteriaScores?: Record<string, number> | null;
+        } | null;
         globalCriteriaAverages?: Record<string, number>;
       };
 
       if (data.personal) {
         setRating(data.personal.score);
         setHasRated(true);
-        if (data.personal.criteria_scores) {
-          setCriteria(prev => ({ ...prev, ...data.personal!.criteria_scores }));
+        const scores = data.personal.criteriaScores || data.personal.criteria_scores;
+        if (scores && typeof scores === "object") {
+          setCriteria(prev => ({ ...prev, ...scores }));
         }
       }
 
