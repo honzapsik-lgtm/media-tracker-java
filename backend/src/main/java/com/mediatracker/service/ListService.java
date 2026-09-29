@@ -170,12 +170,16 @@ public class ListService {
         if (!list.getUserId().equals(userId)) return false;
 
         userListItemRepository.deleteByListId(listId);
+        userListItemRepository.flush();
 
         if (mediaItems != null && !mediaItems.isEmpty()) {
+            Set<String> seenMediaIds = new HashSet<>();
             List<UserListItemEntity> toSave = new ArrayList<>();
-            for (int i = 0; i < mediaItems.size(); i++) {
-                Map<String, Object> item = mediaItems.get(i);
+            for (Map<String, Object> item : mediaItems) {
                 String mediaId = String.valueOf(item.getOrDefault("id", item.get("mediaId")));
+                if (mediaId == null || mediaId.isBlank() || "null".equals(mediaId)) continue;
+                if (!seenMediaIds.add(mediaId)) continue;
+
                 String title = item.get("title") != null ? String.valueOf(item.get("title"))
                         : item.get("mediaTitle") != null ? String.valueOf(item.get("mediaTitle")) : null;
                 String image = item.get("image") != null ? String.valueOf(item.get("image"))
@@ -210,10 +214,10 @@ public class ListService {
                 li.setMediaId(mediaId);
                 li.setMediaTitle(title);
                 li.setMediaImage(image);
-                li.setRankPosition(i + 1);
+                li.setRankPosition(toSave.size() + 1);
                 toSave.add(li);
             }
-            userListItemRepository.saveAll(toSave);
+            userListItemRepository.saveAllAndFlush(toSave);
         }
 
         list.setUpdatedAt(OffsetDateTime.now());
