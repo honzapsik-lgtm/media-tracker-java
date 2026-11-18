@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MediaItem } from "@/types";
 import MediaCardHorizontal from "./MediaCardHorizontal";
 import FriendActionButton from "./FriendActionButton";
-import { Users, Film, Tv, Gamepad2, BookOpen, Layers, MapPin, Star } from "lucide-react";
+import { Users, Film, Tv, Gamepad2, BookOpen, Layers, MapPin, Star, User } from "lucide-react";
 
 interface SearchUser {
   id: string;
@@ -24,7 +24,7 @@ interface SearchResultsTabsProps {
   userResults?: SearchUser[];
 }
 
-type Tab = "all" | "movies" | "shows" | "games" | "manga" | "users";
+type Tab = "all" | "movies" | "shows" | "games" | "manga" | "people" | "users";
 
 export default function SearchResultsTabs({
   results,
@@ -38,20 +38,23 @@ export default function SearchResultsTabs({
     }
   }, []);
 
+  const peopleResults = results.filter((r) => r.type === "person");
+
   // Media tabs strictly display only media
   const filteredResults = results.filter((item) => {
-    if (activeTab === "all") return true;
+    if (activeTab === "all") return item.type !== "person";
     if (activeTab === "movies") return item.type === "movie";
     if (activeTab === "shows") return item.type === "show";
     if (activeTab === "games") return item.type === "game";
     if (activeTab === "manga") return item.type === "manga";
+    if (activeTab === "people") return item.type === "person";
     return false;
   });
 
   const tabs: { id: Tab; label: string; icon: any; count: number }[] = [
     {
       id: "all",
-      label: "All Media",
+      label: "All",
       icon: Layers,
       count: results.length,
     },
@@ -78,6 +81,12 @@ export default function SearchResultsTabs({
       label: "Manga",
       icon: BookOpen,
       count: results.filter((r) => r.type === "manga").length,
+    },
+    {
+      id: "people",
+      label: "People",
+      icon: User,
+      count: peopleResults.length,
     },
     {
       id: "users",
@@ -201,19 +210,117 @@ export default function SearchResultsTabs({
             })}
           </div>
         )
-      ) : (
-        /* Media Results */
-        filteredResults.length === 0 ? (
+      ) : activeTab === "people" ? (
+        /* People Tab Content */
+        peopleResults.length === 0 ? (
           <p className="text-gray-400 text-center py-12">
-            No results found in this category.
+            No people or actors found matching your search.
           </p>
         ) : (
-          <div className="space-y-2">
-            {filteredResults.map((item, index) => (
-              <MediaCardHorizontal key={`${item.id}-${index}`} item={item} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {peopleResults.map((person) => (
+              <Link
+                key={person.id}
+                href={`/person/${person.id}`}
+                className="bg-gray-900/80 border border-gray-800 rounded-2xl p-4 flex items-center gap-4 hover:border-blue-500/50 hover:bg-gray-800 transition-all shadow-lg group"
+              >
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-800 border border-gray-700 group-hover:border-blue-500 shrink-0 transition-colors flex items-center justify-center">
+                  {person.image ? (
+                    <img
+                      src={person.image}
+                      alt={person.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="text-lg font-bold text-gray-500">
+                      {person.title ? person.title.charAt(0) : "P"}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-base text-gray-200 group-hover:text-blue-400 truncate transition-colors">
+                    {person.title}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60 inline-block">
+                      {person.releaseDate || "Person"}
+                    </span>
+                  </div>
+                  {person.description && (
+                    <p className="text-xs text-gray-400 truncate mt-1.5">
+                      {person.description}
+                    </p>
+                  )}
+                </div>
+              </Link>
             ))}
           </div>
         )
+      ) : (
+        /* Media / All Results */
+        <div>
+          {/* Spotlight on People in All tab if matching people exist */}
+          {activeTab === "all" && peopleResults.length > 0 && (
+            <div className="mb-8 bg-gray-900/40 p-5 rounded-2xl border border-gray-800/60">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-amber-400 flex items-center gap-2">
+                  <User className="w-3.5 h-3.5" /> People &amp; Actors
+                </h3>
+                {peopleResults.length > 3 && (
+                  <button
+                    onClick={() => setActiveTab("people")}
+                    className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    View all ({peopleResults.length}) →
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {peopleResults.slice(0, 3).map((person) => (
+                  <Link
+                    key={`spotlight-${person.id}`}
+                    href={`/person/${person.id}`}
+                    className="bg-gray-900 border border-gray-800 rounded-xl p-3.5 flex items-center gap-3.5 hover:border-blue-500/50 hover:bg-gray-800/80 transition-all group"
+                  >
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-800 border border-gray-700 group-hover:border-blue-500 shrink-0 flex items-center justify-center">
+                      {person.image ? (
+                        <img
+                          src={person.image}
+                          alt={person.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-sm font-bold text-gray-500">
+                          {person.title ? person.title.charAt(0) : "P"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-bold text-sm text-gray-200 group-hover:text-blue-400 truncate transition-colors">
+                        {person.title}
+                      </h4>
+                      <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                        {person.description || person.releaseDate || "Person"}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {filteredResults.length === 0 ? (
+            <p className="text-gray-400 text-center py-12">
+              No results found in this category.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {filteredResults.map((item, index) => (
+                <MediaCardHorizontal key={`${item.id}-${index}`} item={item} />
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

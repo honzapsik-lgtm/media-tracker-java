@@ -395,6 +395,11 @@ public class IgdbClient {
             long startTs = java.time.LocalDate.of(Integer.parseInt(year), 1, 1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
             long endTs = java.time.LocalDate.of(Integer.parseInt(year), 12, 31).atTime(23, 59, 59).atZone(ZoneOffset.UTC).toEpochSecond();
             where.add(String.format("first_release_date >= %d & first_release_date <= %d", startTs, endTs));
+        } else if (sort == null || sort.isBlank() || "popular".equals(sort) || "trending".equals(sort)) {
+            // For trending / popular games without a specified year, restrict to recent releases (past 2 years)
+            // so all-time historical classics don't crowd out games that are actually trending right now.
+            long recentStartTs = Instant.now().minus(java.time.Duration.ofDays(730)).getEpochSecond();
+            where.add(String.format("first_release_date >= %d", recentStartTs));
         }
 
         String sortClause;

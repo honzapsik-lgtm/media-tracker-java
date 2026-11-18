@@ -4,6 +4,7 @@ export interface MediaItem {
   type: string;
   image: string | null;
   releaseDate: string | null;
+  description?: string | null;
   communityScore?: number | null;
   listRank?: number | null;
   totalRatings?: number | null;

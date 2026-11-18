@@ -18,6 +18,14 @@ export async function getMediaSeasonEpisodes(slug: string, season: number) {
     air_date: ep.airDate, originalImage: ep.image }));
 }
 
+export function getMediaThemes(slug: string) {
+  return apiFetch<any>(`/media/${encodeURIComponent(slug)}/themes`);
+}
+
+export function getRelatedManga(slug: string) {
+  return apiFetch<any>(`/media/${encodeURIComponent(slug)}/related-manga`);
+}
+
 export function getSeasonThemes(slug: string, season: number) {
   return apiFetch<any>(`/media/${encodeURIComponent(slug)}/season/${season}/themes`);
 }

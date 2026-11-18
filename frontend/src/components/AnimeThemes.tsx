@@ -1,19 +1,76 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-export default function AnimeThemes({ themeData: rawThemeData }: { themeData: any }) {
+export default function AnimeThemes({
+  themeData: rawThemeData,
+  mediaId,
+  isAnime = false,
+}: {
+  themeData?: any;
+  mediaId?: string;
+  isAnime?: boolean;
+}) {
+  const [data, setData] = useState<any>(rawThemeData || null);
+  const [loading, setLoading] = useState<boolean>(!rawThemeData && isAnime && !!mediaId);
   const [showAllOpenings, setShowAllOpenings] = useState(false);
   const [showAllEndings, setShowAllEndings] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<string>("");
 
-  if (!rawThemeData) {
+  useEffect(() => {
+    if (rawThemeData) {
+      setData(rawThemeData);
+      setLoading(false);
+      return;
+    }
+
+    if (!isAnime || !mediaId) {
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoading(true);
+
+    fetch(`/api/media/${encodeURIComponent(mediaId)}/themes`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((themes) => {
+        if (!isMounted) return;
+        setData(themes);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [rawThemeData, mediaId, isAnime]);
+
+  if (loading) {
+    return (
+      <div className="mt-4 bg-gray-950/50 rounded-2xl p-5 border border-gray-800 shadow-xl">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-black text-gray-500 uppercase tracking-widest">Anime Themes</h3>
+        </div>
+        <div className="flex items-center gap-3 py-2 text-sm text-gray-400">
+          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs text-gray-400">Loading themes...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
     return null;
   }
 
-  let themeData = rawThemeData;
-  if (typeof rawThemeData === 'string') {
+  let themeData = data;
+  if (typeof data === "string") {
     try {
-      themeData = JSON.parse(rawThemeData);
+      themeData = JSON.parse(data);
     } catch {
       return null;
     }
@@ -22,8 +79,7 @@ export default function AnimeThemes({ themeData: rawThemeData }: { themeData: an
   const groups: any[] = Array.isArray(themeData?.groups) ? themeData.groups : [];
   const hasMultipleGroups = groups.length > 1;
 
-  const [selectedGroup, setSelectedGroup] = useState<string>(groups[0]?.seasonName || "");
-  const activeGroup = groups.find(g => g.seasonName === selectedGroup) || groups[0] || null;
+  const activeGroup = groups.find((g) => g.seasonName === selectedGroup) || groups[0] || null;
 
   const openings = activeGroup ? activeGroup.openings : (themeData?.openings || []);
   const endings = activeGroup ? activeGroup.endings : (themeData?.endings || []);

@@ -19,8 +19,45 @@ import java.util.regex.Pattern;
 public class AnimeThemesClient {
 
     private static final Logger log = LoggerFactory.getLogger(AnimeThemesClient.class);
-    private static final String BASE_URL = "https://api.animethemes.moe";
+    private static final String GRAPHQL_URL = "https://graphql.animethemes.moe/";
     private static final int CACHE_TTL_SECONDS = 14 * 24 * 3600; // 14 days
+
+    private static final String GRAPHQL_QUERY = """
+            query SearchAnime($q: String!) {
+              search(search: $q, first: 15) {
+                anime {
+                  id
+                  title {
+                    romaji
+                    english
+                  }
+                  slug
+                  format
+                  animethemes {
+                    type
+                    slug
+                    sequence
+                    song {
+                      title {
+                        romaji
+                      }
+                      performances {
+                        artist {
+                          name {
+                            main
+                          }
+                        }
+                      }
+                    }
+                    animethemeentries {
+                      episodes
+                      version
+                    }
+                  }
+                }
+              }
+            }
+            """;
 
     private final RestClient restClient;
     private final CacheService cacheService;
@@ -37,7 +74,7 @@ public class AnimeThemesClient {
         if (query.isBlank()) return Optional.empty();
 
         String queryClean = query.toLowerCase().replaceAll("[^a-z0-9]", "-");
-        String cacheKey = isMovie ? "anime-themes-movie-" + queryClean : "anime-themes-v5-" + queryClean;
+        String cacheKey = isMovie ? "anime-themes-movie-v2-" + queryClean : "anime-themes-v6-" + queryClean;
 
         Optional<AnimeThemeDto> cached = cacheService.get(cacheKey, AnimeThemeDto.class);
         if (cached.isPresent()) {
@@ -57,33 +94,39 @@ public class AnimeThemesClient {
 
         for (String q : searchQueries) {
             try {
-                String encodedQ = URLEncoder.encode(q, StandardCharsets.UTF_8);
-                String uri = String.format("%s/anime?q=%s&include=animethemes.song.artists,animethemes.animethemeentries", BASE_URL, encodedQ);
+                Map<String, Object> reqBody = Map.of(
+                        "query", GRAPHQL_QUERY,
+                        "variables", Map.of("q", q)
+                );
 
-                JsonNode data = restClient.get()
-                        .uri(uri)
+                JsonNode data = restClient.post()
+                        .uri(GRAPHQL_URL)
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MediaTracker/1.0")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .body(reqBody)
                         .retrieve()
                         .body(JsonNode.class);
 
-                if (data == null || !data.has("anime") || !data.get("anime").isArray() || data.get("anime").isEmpty()) {
+                JsonNode animeList = (data != null && data.path("data").path("search").has("anime"))
+                        ? data.path("data").path("search").path("anime")
+                        : (data != null ? data.path("anime") : null);
+
+                if (animeList == null || !animeList.isArray() || animeList.isEmpty()) {
                     continue;
                 }
-
-                JsonNode animeList = data.get("anime");
 
                 // Case: Movie
                 if (isMovie) {
                     JsonNode bestMovie = null;
                     for (JsonNode a : animeList) {
-                        if ("Movie".equalsIgnoreCase(a.path("media_format").asText())) {
+                        if ("Movie".equalsIgnoreCase(getEntryFormat(a))) {
                             bestMovie = a;
                             break;
                         }
                     }
                     if (bestMovie == null) {
                         for (JsonNode a : animeList) {
-                            if (a.path("name").asText("").toLowerCase().contains("movie")) {
+                            if (getEntryName(a).toLowerCase().contains("movie")) {
                                 bestMovie = a;
                                 break;
                             }
@@ -121,8 +164,8 @@ public class AnimeThemesClient {
                 // Case: TV franchise
                 JsonNode anchor = null;
                 for (JsonNode a : animeList) {
-                    String format = a.path("media_format").asText();
-                    String name = a.path("name").asText("").toLowerCase();
+                    String format = getEntryFormat(a);
+                    String name = getEntryName(a).toLowerCase();
                     if (("TV".equalsIgnoreCase(format) || name.contains("kanketsu")) && a.path("animethemes").isArray() && !a.path("animethemes").isEmpty()) {
                         anchor = a;
                         break;
@@ -130,7 +173,7 @@ public class AnimeThemesClient {
                 }
                 if (anchor == null) anchor = animeList.get(0);
 
-                String anchorName = anchor.path("name").asText("").toLowerCase().replaceAll("[^a-z0-9\\s]", "");
+                String anchorName = getEntryName(anchor).toLowerCase().replaceAll("[^a-z0-9\\s]", "");
                 String primaryToken = "";
                 for (String word : anchorName.split("\\s+")) {
                     if (word.length() >= 4) {
@@ -141,9 +184,9 @@ public class AnimeThemesClient {
 
                 List<JsonNode> matchedEntries = new ArrayList<>();
                 for (JsonNode a : animeList) {
-                    String format = a.path("media_format").asText();
+                    String format = getEntryFormat(a);
                     if ("OVA".equalsIgnoreCase(format)) continue;
-                    String aName = a.path("name").asText("").toLowerCase();
+                    String aName = getEntryName(a).toLowerCase();
                     String aSlug = a.path("slug").asText("").toLowerCase();
                     if (aName.contains("chuugakkou")) continue;
 
@@ -159,7 +202,7 @@ public class AnimeThemesClient {
 
                 Set<String> seasonalNames = new HashSet<>();
                 for (JsonNode entry : entriesToProcess) {
-                    SeasonGroupClassification c = classifyAnimeSeasonGroup(entry.path("name").asText(""), entry.path("media_format").asText(""));
+                    SeasonGroupClassification c = classifyAnimeSeasonGroup(getEntryName(entry), getEntryFormat(entry));
                     if (!c.isMovie && !c.isSpecial) {
                         seasonalNames.add(c.seasonName);
                     }
@@ -175,7 +218,7 @@ public class AnimeThemesClient {
                         JsonNode animethemes = entry.path("animethemes");
                         if (!animethemes.isArray() || animethemes.isEmpty()) continue;
 
-                        SeasonGroupClassification c = classifyAnimeSeasonGroup(entry.path("name").asText(""), entry.path("media_format").asText(""));
+                        SeasonGroupClassification c = classifyAnimeSeasonGroup(getEntryName(entry), getEntryFormat(entry));
                         if (c.isSpecial) continue;
 
                         AnimeThemeDto.AnimeThemeGroup group = groupMap.computeIfAbsent(c.seasonName, k ->
@@ -205,7 +248,7 @@ public class AnimeThemesClient {
                     // Continuous anime (e.g. One Piece, Bleach)
                     JsonNode mainEntry = entriesToProcess.get(0);
                     for (JsonNode e : entriesToProcess) {
-                        if ("TV".equalsIgnoreCase(e.path("media_format").asText()) && e.path("animethemes").isArray() && !e.path("animethemes").isEmpty()) {
+                        if ("TV".equalsIgnoreCase(getEntryFormat(e)) && e.path("animethemes").isArray() && !e.path("animethemes").isEmpty()) {
                             mainEntry = e;
                             break;
                         }
@@ -282,15 +325,48 @@ public class AnimeThemesClient {
         return Optional.empty();
     }
 
+    private String getEntryName(JsonNode a) {
+        if (a.has("title") && a.get("title").isObject()) {
+            String romaji = a.path("title").path("romaji").asText("");
+            if (!romaji.isBlank()) return romaji;
+            String english = a.path("title").path("english").asText("");
+            if (!english.isBlank()) return english;
+        }
+        return a.path("name").asText("");
+    }
+
+    private String getEntryFormat(JsonNode a) {
+        if (a.hasNonNull("format")) return a.get("format").asText("");
+        return a.path("media_format").asText("");
+    }
+
     private String formatThemeLabel(JsonNode t) {
         String slug = t.path("slug").asText("");
-        String songTitle = t.path("song").path("title").asText("Unknown");
-        String artist = null;
-        JsonNode artists = t.path("song").path("artists");
-        if (artists.isArray() && !artists.isEmpty()) {
-            artist = artists.get(0).path("name").asText(null);
+        String songTitle = "Unknown";
+        JsonNode titleNode = t.path("song").path("title");
+        if (titleNode.isObject()) {
+            songTitle = titleNode.path("romaji").asText(titleNode.path("native").asText("Unknown"));
+        } else if (titleNode.isTextual()) {
+            songTitle = titleNode.asText("Unknown");
         }
-        return (slug.isBlank() ? "" : slug + ": ") + "\"" + songTitle + "\"" + (artist != null ? " by " + artist : "");
+
+        String artist = null;
+        JsonNode perfs = t.path("song").path("performances");
+        if (perfs.isArray() && !perfs.isEmpty()) {
+            JsonNode artistNode = perfs.get(0).path("artist");
+            if (artistNode.has("name") && artistNode.get("name").isObject()) {
+                artist = artistNode.get("name").path("main").asText(null);
+            } else if (artistNode.has("name")) {
+                artist = artistNode.path("name").asText(null);
+            }
+        }
+        if (artist == null) {
+            JsonNode artists = t.path("song").path("artists");
+            if (artists.isArray() && !artists.isEmpty()) {
+                artist = artists.get(0).path("name").asText(null);
+            }
+        }
+        return (slug.isBlank() ? "" : slug + ": ") + "\"" + songTitle + "\"" + (artist != null && !artist.isBlank() ? " by " + artist : "");
     }
 
     private static class EpisodeRange {

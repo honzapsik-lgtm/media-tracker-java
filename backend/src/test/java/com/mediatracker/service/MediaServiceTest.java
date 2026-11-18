@@ -21,13 +21,14 @@ class MediaServiceTest {
     private final RawgClient rawg = mock(RawgClient.class);
     private final IgdbClient igdb = mock(IgdbClient.class);
     private final MediaStatsRepository stats = mock(MediaStatsRepository.class);
+    private final CacheService cacheService = mock(CacheService.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private MediaService service;
 
     @BeforeEach
     void setUp() {
         service = new MediaService(tmdb, igdb, rawg, manga, anilist, themes, mock(JikanClient.class),
-                new AnimeCanonService(), stats, mapper);
+                new AnimeCanonService(), stats, cacheService, mapper);
     }
 
     @Test

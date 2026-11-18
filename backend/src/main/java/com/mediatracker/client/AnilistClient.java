@@ -251,6 +251,79 @@ public class AnilistClient {
         return mangaDexClient.searchManga(query);
     }
 
+    public List<MediaItemDto> searchStaff(String query) {
+        if (query == null || query.isBlank()) return List.of();
+        String normalizedQuery = query.trim().toLowerCase();
+        String cacheKey = "anilist-search-staff-" + normalizedQuery;
+
+        Optional<List> cached = cacheService.get(cacheKey, List.class);
+        if (cached.isPresent()) {
+            return objectMapper.convertValue(cached.get(), objectMapper.getTypeFactory().constructCollectionType(List.class, MediaItemDto.class));
+        }
+
+        String gql = """
+            query ($search: String) {
+              Page(page: 1, perPage: 10) {
+                staff(search: $search) {
+                  id
+                  name { full native }
+                  image { large }
+                  primaryOccupations
+                }
+              }
+            }
+        """;
+
+        Map<String, Object> body = Map.of("query", gql, "variables", Map.of("search", query.trim()));
+
+        try {
+            JsonNode response = restClient.post()
+                    .uri(GRAPHQL_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(JsonNode.class);
+
+            if (response != null && response.has("data") && response.get("data").has("Page")) {
+                JsonNode staffList = response.get("data").get("Page").path("staff");
+                if (staffList.isArray() && !staffList.isEmpty()) {
+                    List<MediaItemDto> results = new ArrayList<>();
+                    for (JsonNode item : staffList) {
+                        int id = item.path("id").asInt();
+                        String name = item.path("name").hasNonNull("full") ? item.path("name").get("full").asText()
+                                : item.path("name").hasNonNull("native") ? item.path("name").get("native").asText()
+                                : "Unknown";
+
+                        String img = item.path("image").path("large").asText(null);
+                        List<String> occupations = new ArrayList<>();
+                        JsonNode occNode = item.path("primaryOccupations");
+                        if (occNode.isArray()) {
+                            for (JsonNode o : occNode) {
+                                occupations.add(o.asText());
+                            }
+                        }
+                        String role = occupations.isEmpty() ? "Creator" : String.join(", ", occupations);
+
+                        MediaItemDto dto = new MediaItemDto();
+                        dto.setId("anilist-" + id);
+                        dto.setTitle(name);
+                        dto.setType("person");
+                        dto.setImage(img);
+                        dto.setReleaseDate(role);
+                        dto.setDescription(role);
+                        dto.setOrigin("ANILIST");
+                        results.add(dto);
+                    }
+                    cacheService.put(cacheKey, "anilist", results, 24 * 3600);
+                    return results;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("AniList staff search error for query '{}': {}", query, e.getMessage());
+        }
+        return List.of();
+    }
+
     public List<DiscoverItemDto> discoverManga(String genre, String year, String sort, int page) {
         String cacheKey = String.format("discover-manga-%s-%s-%s-%d",
                 genre != null ? genre : "all", year != null ? year : "all", sort != null ? sort : "default", page);

@@ -10,6 +10,7 @@ interface MediaItem {
   type: string;
   image: string | null;
   releaseDate: string;
+  description?: string | null;
   origin?: string;
 }
 
@@ -103,35 +104,52 @@ export default function SearchBar() {
             <div className="p-4 text-center text-sm text-gray-400">Searching...</div>
           ) : results.length > 0 ? (
             <div className="max-h-[70vh] overflow-y-auto scrollbar-none">
-              {results.map((item) => (
-                <Link
-                  key={`${item.origin || 'tmdb'}-${item.id}`}
-                  href={item.origin === 'ANILIST' && !String(item.id).startsWith('anilist-') ? `/media/anilist-manga-${item.id}` : `/media/${item.id}`}
-                  onClick={handleResultClick}
-                  className="flex items-center gap-3 p-3 hover:bg-gray-800 transition-colors group"
-                >
-                  <div className="w-10 h-14 bg-gray-800 rounded overflow-hidden shrink-0">
-                    {item.image ? (
-                      <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 text-center">No Img</div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-200 group-hover:text-blue-400 truncate">
-                      {item.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
-                        {item.type}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {item.releaseDate ? item.releaseDate.split("-")[0] : "N/A"}
-                      </span>
+              {results.map((item) => {
+                const isPerson = item.type === "person";
+                const href = isPerson
+                  ? `/person/${item.id}`
+                  : item.origin === "ANILIST" && !String(item.id).startsWith("anilist-")
+                  ? `/media/anilist-manga-${item.id}`
+                  : `/media/${item.id}`;
+
+                return (
+                  <Link
+                    key={`${item.origin || 'tmdb'}-${item.id}`}
+                    href={href}
+                    onClick={handleResultClick}
+                    className="flex items-center gap-3 p-3 hover:bg-gray-800 transition-colors group"
+                  >
+                    <div className={`w-10 h-14 bg-gray-800 ${isPerson ? 'rounded-full w-11 h-11' : 'rounded'} overflow-hidden shrink-0 flex items-center justify-center`}>
+                      {item.image ? (
+                        <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 text-center font-bold">
+                          {isPerson ? (item.title ? item.title.charAt(0) : "P") : "No Img"}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </Link>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-200 group-hover:text-blue-400 truncate">
+                        {item.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                          isPerson
+                            ? "bg-amber-950 text-amber-300 border border-amber-800/60"
+                            : "bg-gray-800 text-gray-400"
+                        }`}>
+                          {isPerson ? "Person" : item.type}
+                        </span>
+                        <span className="text-xs text-gray-500 truncate">
+                          {isPerson
+                            ? (item.description || item.releaseDate || "Person")
+                            : (item.releaseDate ? item.releaseDate.split("-")[0] : "N/A")}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
               <div className="p-2 border-t border-gray-800 bg-gray-950/50 text-center">
                 <button 
                   onClick={handleSearch}

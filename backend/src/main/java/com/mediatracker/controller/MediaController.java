@@ -82,6 +82,18 @@ public class MediaController {
         return ResponseEntity.ok(episodes);
     }
 
+    @GetMapping("/{slug}/themes")
+    @Operation(summary = "Get anime themes for media")
+    public Object getMediaThemes(@PathVariable String slug) {
+        return mediaService.getMediaThemes(slug);
+    }
+
+    @GetMapping("/{slug}/related-manga")
+    @Operation(summary = "Get related manga for anime media")
+    public Object getRelatedManga(@PathVariable String slug) {
+        return mediaService.getRelatedManga(slug).orElse(java.util.Map.of());
+    }
+
     @GetMapping("/{slug}/season/{seasonNumber}/themes")
     public Object getSeasonThemes(@PathVariable String slug, @PathVariable int seasonNumber) {
         return mediaService.getSeasonThemes(slug, seasonNumber);

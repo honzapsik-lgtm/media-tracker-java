@@ -21,6 +21,7 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.DISCORD_CLIENT_ID,
       clientSecret: process.env.DISCORD_CLIENT_SECRET,
       allowDangerousEmailAccountLinking: true,
+      issuer: "https://discord.com",
     })] : []),
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET ? [GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,

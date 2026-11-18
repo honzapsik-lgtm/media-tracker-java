@@ -42,16 +42,40 @@ public class PersonProfileService {
     }
 
     private Optional<UnifiedProfileDto> tmdb(int id) {
+        Set<Integer> shortFilmIds = fetchShortFilmIds(id);
         return providers.tmdb("/person/" + id, Map.of("language", "en-US", "append_to_response", "combined_credits"))
                 .map(data -> profile("tmdb", String.valueOf(id), text(data, "name"), text(data.path("also_known_as").path(0)),
                         text(data, "biography"), tmdbImage(text(data, "profile_path")), text(data, "birthday"), text(data, "deathday"),
-                        text(data, "known_for_department"), null, tmdbCredits(data.path("combined_credits").path("cast"), true),
-                        tmdbCredits(data.path("combined_credits").path("crew"), false)));
+                        text(data, "known_for_department"), null, tmdbCredits(data.path("combined_credits").path("cast"), true, shortFilmIds),
+                        tmdbCredits(data.path("combined_credits").path("crew"), false, shortFilmIds)));
     }
 
-    private List<Credit> tmdbCredits(JsonNode data, boolean cast) {
+    private Set<Integer> fetchShortFilmIds(int personId) {
+        Set<Integer> ids = new HashSet<>();
+        try {
+            providers.tmdb("/discover/movie", Map.of(
+                    "with_people", String.valueOf(personId),
+                    "with_keywords", "263548|386616|386617|386244|386921"
+            )).ifPresent(data -> {
+                for (JsonNode item : items(data.path("results"))) {
+                    int mid = item.path("id").asInt(0);
+                    if (mid > 0) ids.add(mid);
+                }
+            });
+        } catch (Exception e) {
+            // ignore fallback
+        }
+        return ids;
+    }
+
+    private List<Credit> tmdbCredits(JsonNode data, boolean cast, Set<Integer> shortFilmIds) {
         List<JsonNode> sorted = items(data);
-        sorted.sort(Comparator.comparingDouble((JsonNode n) -> n.path("popularity").asDouble()).reversed());
+        sorted.sort((a, b) -> {
+            long vA = a.path("vote_count").asLong(0);
+            long vB = b.path("vote_count").asLong(0);
+            if (vA != vB) return Long.compare(vB, vA);
+            return Double.compare(b.path("popularity").asDouble(0.0), a.path("popularity").asDouble(0.0));
+        });
         List<Credit> result = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (JsonNode item : sorted) {
@@ -61,9 +85,71 @@ public class PersonProfileService {
             String key = media.mediaId() + (cast ? "" : "-" + text(item, "job"));
             if (!seen.add(key)) continue;
             String role = first(text(item, cast ? "character" : "job"), cast ? "Actor" : "Crew");
-            result.add(new Credit(media, role, cast && role.toLowerCase(Locale.ROOT).contains("(voice)"), null));
+            List<Integer> genreIds = new ArrayList<>();
+            JsonNode gIds = item.path("genre_ids");
+            if (gIds.isArray()) {
+                for (JsonNode g : gIds) {
+                    genreIds.add(g.asInt());
+                }
+            }
+            int tmdbId = item.path("id").asInt(0);
+            String overview = text(item, "overview");
+            String category = determineCategory(type, role, media.title(), overview, genreIds, shortFilmIds != null && shortFilmIds.contains(tmdbId));
+            result.add(new Credit(media, role, cast && role.toLowerCase(Locale.ROOT).contains("(voice)"), null, category, genreIds));
         }
         return result;
+    }
+
+    private String determineCategory(String mediaType, String role, String title, String overview, List<Integer> genreIds, boolean isTaggedShort) {
+        String lowerRole = (role != null ? role : "").toLowerCase(Locale.ROOT).trim();
+        String lowerTitle = (title != null ? title : "").toLowerCase(Locale.ROOT).trim();
+        String lowerOverview = (overview != null ? overview : "").toLowerCase(Locale.ROOT).trim();
+
+        // 1. Shorts via official keyword tags or metadata/overview cues
+        if (isTaggedShort
+                || lowerTitle.contains("(short)")
+                || lowerTitle.contains("short film")
+                || lowerTitle.endsWith(" short")
+                || lowerOverview.contains("short film")
+                || lowerOverview.startsWith("a short ")
+                || lowerOverview.contains("a short by")
+                || lowerOverview.contains("short by ")
+                || lowerOverview.contains("short subject")
+                || lowerOverview.contains("short films")
+                || lowerOverview.contains("student short")) {
+            return "short";
+        }
+
+        // 2. Documentaries: TMDb genre 99, or title contains documentary keywords
+        if (genreIds.contains(99)
+                || lowerTitle.contains("behind the scenes")
+                || lowerTitle.contains("the making of")
+                || lowerTitle.contains("a football life")
+                || lowerTitle.contains("retrospective")
+                || lowerTitle.contains("documentary")
+                || lowerOverview.contains("documentary film")
+                || lowerOverview.contains("behind-the-scenes")) {
+            return "documentary";
+        }
+
+        // 3. Talk Shows, News, Interviews, Town Halls & Self Appearances:
+        if (genreIds.contains(10767)
+                || genreIds.contains(10763)
+                || lowerRole.startsWith("self")
+                || lowerRole.startsWith("himself")
+                || lowerRole.startsWith("herself")
+                || lowerRole.equals("guest")
+                || lowerTitle.contains("town hall")
+                || lowerTitle.contains("interview")
+                || lowerTitle.contains("live with ")
+                || lowerTitle.contains("the tonight show")
+                || lowerTitle.contains("jimmy kimmel")
+                || lowerTitle.contains("the late show")
+                || lowerTitle.contains("the ellen")) {
+            return "talk";
+        }
+
+        return "narrative";
     }
 
     private Optional<UnifiedProfileDto> igdb(int id) {

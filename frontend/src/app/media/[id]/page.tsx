@@ -12,6 +12,7 @@ import ExpandableAniListCast from "@/components/ExpandableAniListCast";
 import { StaffGrid } from '@/components/StaffGrid';
 import WatchProviders from "@/components/WatchProviders";
 import AnimeThemes from "@/components/AnimeThemes";
+import SourceManga from "@/components/SourceManga";
 import BackToSearchButton from "@/components/BackToSearchButton";
 import { CRITERIA_CONFIG } from "@/lib/constants";
 
@@ -107,6 +108,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
   const mediaDetails = await getMediaPageDetails(mediaId);
   if (!mediaDetails) return notFound();
   if (mediaDetails.id !== mediaId) redirect(`/media/${mediaDetails.id}`);
+  const isAnime = (mediaDetails.originalLanguage === "ja") && mediaDetails.genres?.includes("Animation");
   let primaryStaff: any[] = [];
   let secondaryStaff: any[] = [];
   const relatedManga = mediaDetails.relatedManga;
@@ -305,8 +307,8 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
             )}
 
             {/* ANIME THEMES */}
-            {(animeThemes) && (
-              <AnimeThemes themeData={animeThemes} />
+            {(isAnime || animeThemes) && (
+              <AnimeThemes mediaId={mediaId} isAnime={isAnime} themeData={animeThemes} />
             )}
 
             {/* KEYWORDS */}
@@ -597,28 +599,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
                   )
                 )}
 
-                {relatedManga && (
-                  <div>
-                    <h2 className="text-2xl font-bold mb-6 text-gray-400">Source Manga</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                      <Link 
-                        href={String(relatedManga.id).startsWith('mangadex-') || String(relatedManga.id).startsWith('anilist-') ? `/media/${relatedManga.id}` : `/media/anilist-${relatedManga.id}`} 
-                        className="bg-gray-900 p-4 rounded-xl border border-gray-800 hover:border-blue-500 hover:bg-gray-800/80 transition-colors flex items-center gap-4 group"
-                      >
-                        {relatedManga.image ? (
-                          <img src={relatedManga.image} alt={relatedManga.title} className="w-14 h-20 object-cover rounded-lg shadow-md shrink-0" />
-                        ) : (
-                          <div className="w-14 h-20 bg-gray-800 rounded-lg flex items-center justify-center text-xs text-gray-500 shrink-0">No Img</div>
-                        )}
-                        <div className="min-w-0">
-                          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Manga</span>
-                          <p className="font-bold text-sm text-gray-200 group-hover:text-blue-400 transition-colors truncate">{relatedManga.title}</p>
-                          <p className="text-xs text-gray-500 mt-1">Read on MangaDex →</p>
-                        </div>
-                      </Link>
-                    </div>
-                  </div>
-                )}
+                <SourceManga mediaId={mediaId} initialManga={relatedManga} isAnime={isAnime} />
 
                 {spinoffItems.length > 0 && (
                   <div>

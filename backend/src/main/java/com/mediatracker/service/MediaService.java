@@ -25,6 +25,7 @@ public class MediaService {
     private final JikanClient jikanClient;
     private final AnimeCanonService animeCanonService;
     private final MediaStatsRepository mediaStatsRepository;
+    private final CacheService cacheService;
     private final ObjectMapper objectMapper;
 
     public MediaService(TmdbClient tmdbClient,
@@ -36,6 +37,7 @@ public class MediaService {
                         JikanClient jikanClient,
                         AnimeCanonService animeCanonService,
                         MediaStatsRepository mediaStatsRepository,
+                        CacheService cacheService,
                         ObjectMapper objectMapper) {
         this.tmdbClient = tmdbClient;
         this.igdbClient = igdbClient;
@@ -46,6 +48,7 @@ public class MediaService {
         this.jikanClient = jikanClient;
         this.animeCanonService = animeCanonService;
         this.mediaStatsRepository = mediaStatsRepository;
+        this.cacheService = cacheService;
         this.objectMapper = objectMapper;
     }
 
@@ -66,13 +69,10 @@ public class MediaService {
                         MediaItemDto dto = itemOpt.get();
                         boolean isMovie = "movie".equalsIgnoreCase(dto.getType());
 
-                        boolean isAnime = "ja".equals(dto.getOriginalLanguage()) && dto.getGenres().contains("Animation");
+                        boolean isAnime = "ja".equals(dto.getOriginalLanguage()) && dto.getGenres() != null && dto.getGenres().contains("Animation");
                         if (isAnime) {
-                            Optional<AnimeThemeDto> themes = animeThemesClient.fetchThemes(dto.getTitle(), dto.getOriginalTitle(), isMovie);
-                            if (themes.isEmpty()) themes = jikanClient.searchAnimeThemes(dto.getTitle(), dto.getOriginalTitle(), isMovie);
-                            themes.ifPresent(dto::setThemeData);
-                            anilistClient.searchManga(dto.getTitle()).stream().findFirst().ifPresent(m ->
-                                    dto.setRelatedManga(Map.of("id", m.getId(), "title", m.getTitle(), "image", m.getImage() != null ? m.getImage() : "")));
+                            cacheService.get("media-themes-v2-" + slug, AnimeThemeDto.class).ifPresent(dto::setThemeData);
+                            cacheService.get("related-manga-" + slug, Map.class).ifPresent(dto::setRelatedManga);
                         }
 
                         // If TV show, adjust seasons and canon movies
@@ -272,10 +272,74 @@ public class MediaService {
         return tmdbClient.getEpisodeCredits(tvId, season, episode);
     }
 
+    public AnimeThemeDto getMediaThemes(String slug) {
+        if (slug == null || slug.isBlank()) return new AnimeThemeDto();
+        String cacheKey = "media-themes-v2-" + slug;
+        Optional<AnimeThemeDto> cached = cacheService.get(cacheKey, AnimeThemeDto.class);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        Optional<MediaItemDto> itemOpt = getMediaDetails(slug);
+        if (itemOpt.isEmpty()) return new AnimeThemeDto();
+        MediaItemDto dto = itemOpt.get();
+
+        boolean isAnime = "ja".equals(dto.getOriginalLanguage()) && dto.getGenres() != null && dto.getGenres().contains("Animation");
+        if (!isAnime) return new AnimeThemeDto();
+
+        boolean isMovie = "movie".equalsIgnoreCase(dto.getType());
+        Optional<AnimeThemeDto> themes = animeThemesClient.fetchThemes(dto.getTitle(), dto.getOriginalTitle(), isMovie);
+        if (themes.isEmpty()) {
+            themes = jikanClient.searchAnimeThemes(dto.getTitle(), dto.getOriginalTitle(), isMovie);
+        }
+
+        AnimeThemeDto result = themes.orElseGet(AnimeThemeDto::new);
+        int ttl = (result.getOpenings().isEmpty() && result.getEndings().isEmpty() && result.getGroups().isEmpty())
+                ? 86400
+                : 14 * 86400;
+        cacheService.put(cacheKey, "media", result, ttl);
+        return result;
+    }
+
+    public Optional<Map<String, Object>> getRelatedManga(String slug) {
+        if (slug == null || slug.isBlank()) return Optional.empty();
+        String cacheKey = "related-manga-" + slug;
+        Optional<Map> cached = cacheService.get(cacheKey, Map.class);
+        if (cached.isPresent()) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) cached.get();
+            if (map.isEmpty()) return Optional.empty();
+            return Optional.of(map);
+        }
+
+        Optional<MediaItemDto> itemOpt = getMediaDetails(slug);
+        if (itemOpt.isEmpty()) return Optional.empty();
+        MediaItemDto dto = itemOpt.get();
+
+        boolean isAnime = "ja".equals(dto.getOriginalLanguage()) && dto.getGenres() != null && dto.getGenres().contains("Animation");
+        if (!isAnime) return Optional.empty();
+
+        List<MediaItemDto> results = anilistClient.searchManga(dto.getTitle());
+        if (!results.isEmpty()) {
+            MediaItemDto m = results.get(0);
+            Map<String, Object> mangaMap = Map.of(
+                    "id", m.getId(),
+                    "title", m.getTitle(),
+                    "image", m.getImage() != null ? m.getImage() : ""
+            );
+            cacheService.put(cacheKey, "media", mangaMap, 14 * 86400);
+            return Optional.of(mangaMap);
+        }
+
+        cacheService.put(cacheKey, "media", Map.of(), 86400);
+        return Optional.empty();
+    }
+
     public AnimeThemeDto getSeasonThemes(String slug, int season) {
-        Optional<MediaItemDto> media = getMediaDetails(slug);
-        if (media.isEmpty() || media.get().getThemeData() == null) return new AnimeThemeDto();
-        AnimeThemeDto themes = objectMapper.convertValue(media.get().getThemeData(), AnimeThemeDto.class);
+        AnimeThemeDto themes = getMediaThemes(slug);
+        if (themes == null || (themes.getOpenings().isEmpty() && themes.getEndings().isEmpty() && themes.getGroups().isEmpty())) {
+            return new AnimeThemeDto();
+        }
         for (AnimeThemeDto.AnimeThemeGroup group : themes.getGroups()) {
             String name = group.getSeasonName().toLowerCase(Locale.ROOT);
             if (Objects.equals(group.getSeasonNumber(), season)
@@ -283,14 +347,17 @@ public class MediaService {
                 return new AnimeThemeDto(group.getOpenings(), group.getEndings());
             }
         }
-        String label = "";
-        for (var summary : objectMapper.valueToTree(media.get().getSeasons())) {
-            if (summary.path("season_number").asInt(-1) == season) label = summary.path("name").asText("").toLowerCase(Locale.ROOT);
-        }
-        if (!label.isBlank()) {
-            for (var group : themes.getGroups()) {
-                String name = group.getSeasonName().toLowerCase(Locale.ROOT);
-                if (name.contains(label) || label.contains(name)) return new AnimeThemeDto(group.getOpenings(), group.getEndings());
+        Optional<MediaItemDto> media = getMediaDetails(slug);
+        if (media.isPresent() && media.get().getSeasons() != null) {
+            String label = "";
+            for (var summary : objectMapper.valueToTree(media.get().getSeasons())) {
+                if (summary.path("season_number").asInt(-1) == season) label = summary.path("name").asText("").toLowerCase(Locale.ROOT);
+            }
+            if (!label.isBlank()) {
+                for (var group : themes.getGroups()) {
+                    String name = group.getSeasonName().toLowerCase(Locale.ROOT);
+                    if (name.contains(label) || label.contains(name)) return new AnimeThemeDto(group.getOpenings(), group.getEndings());
+                }
             }
         }
         return themes;

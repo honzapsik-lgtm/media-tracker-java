@@ -7,6 +7,8 @@ export type UnifiedCredit = {
   role: string;
   isVoiceRole: boolean;
   characterImage?: string | null;
+  category?: string;
+  genreIds?: number[];
 };
 
 export type UnifiedProfile = {

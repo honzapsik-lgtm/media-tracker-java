@@ -178,7 +178,8 @@ export default function DiscoverFilters() {
         onChange={(e) => handleFilterChange("sort", e.target.value)}
         className="bg-gray-950 border border-gray-700 text-white text-sm font-semibold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 outline-none cursor-pointer hover:border-gray-500 transition-colors md:ml-auto"
       >
-        <option value="popular">Most Popular</option>
+        <option value="popular">Trending / Popular</option>
+        <option value="all_time">All-Time Most Popular</option>
         <option value="top_rated">Highest Rated</option>
         <option value="newest">Newest First</option>
       </select>

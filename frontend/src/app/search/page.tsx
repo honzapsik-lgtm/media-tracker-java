@@ -21,8 +21,10 @@ export default async function SearchPage({
         type: item.type || "other",
         image: item.image || null,
         releaseDate: item.releaseDate || null,
+        description: item.description || null,
         communityScore: typeof item.globalScore === "number" ? item.globalScore : null,
         listRank: null,
+        origin: item.origin || null,
       }));
     } catch (e) {
       console.error("[SearchPage] Failed to fetch search results from Spring Boot:", e);

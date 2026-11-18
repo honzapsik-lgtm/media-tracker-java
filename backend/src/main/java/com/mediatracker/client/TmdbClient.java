@@ -41,7 +41,7 @@ public class TmdbClient {
     }
 
     public Optional<MediaItemDto> getDetails(int id, String type) {
-        String cacheKey = "tmdb-details-v2-" + type + "-" + id;
+        String cacheKey = "tmdb-details-v3-" + type + "-" + id;
         Optional<MediaItemDto> cached = cacheService.get(cacheKey, MediaItemDto.class);
         if (cached.isPresent()) {
             return cached;
@@ -54,8 +54,8 @@ public class TmdbClient {
 
         try {
             String appendParams = "tv".equals(type)
-                    ? "credits,aggregate_credits,videos,release_dates,watch/providers"
-                    : "credits,videos,release_dates,watch/providers";
+                    ? "credits,aggregate_credits,videos,release_dates,watch/providers,keywords"
+                    : "credits,videos,release_dates,watch/providers,keywords";
 
             String uri = String.format("%s/%s/%d?api_key=%s&language=en-US&append_to_response=%s",
                     BASE_URL, type, id, apiKey, appendParams);
@@ -103,6 +103,18 @@ public class TmdbClient {
                 }
             }
             dto.setGenres(genres);
+
+            // Keywords
+            List<String> keywords = new ArrayList<>();
+            JsonNode rawKeywords = data.path("keywords").has("keywords")
+                    ? data.path("keywords").path("keywords")
+                    : data.path("keywords").path("results");
+            if (rawKeywords.isArray()) {
+                for (JsonNode k : rawKeywords) {
+                    if (k.hasNonNull("name")) keywords.add(k.get("name").asText());
+                }
+            }
+            dto.setKeywords(keywords);
 
             // Trailer
             JsonNode videos = data.path("videos").path("results");
@@ -273,17 +285,31 @@ public class TmdbClient {
         if (apiKey == null || apiKey.isBlank()) return List.of();
 
         try {
-            StringBuilder sb = new StringBuilder(String.format("%s/discover/%s?api_key=%s&language=en-US&page=%d", BASE_URL, tmdbType, apiKey, page));
-            if (genreId != null) sb.append("&with_genres=").append(genreId);
-            if (year != null && !year.isBlank()) {
-                sb.append("movie".equals(tmdbType) ? "&primary_release_year=" : "&first_air_date_year=").append(year);
-            }
-            if (sort != null && !sort.isBlank()) {
-                String tmdbSort = "popular".equals(sort) ? "popularity.desc" : "top_rated".equals(sort) ? "vote_average.desc" : sort;
-                sb.append("&sort_by=").append(tmdbSort);
+            boolean isTrending = genreId == null && (year == null || year.isBlank()) &&
+                    ("popular".equals(sort) || "trending".equals(sort) || sort == null || sort.isBlank());
+
+            String requestUrl;
+            if (isTrending) {
+                requestUrl = String.format("%s/trending/%s/week?api_key=%s&page=%d", BASE_URL, tmdbType, apiKey, page);
+            } else {
+                StringBuilder sb = new StringBuilder(String.format("%s/discover/%s?api_key=%s&language=en-US&page=%d", BASE_URL, tmdbType, apiKey, page));
+                if (genreId != null) sb.append("&with_genres=").append(genreId);
+                if (year != null && !year.isBlank()) {
+                    sb.append("movie".equals(tmdbType) ? "&primary_release_year=" : "&first_air_date_year=").append(year);
+                } else if ("tv".equals(tmdbType) && ("popular".equals(sort) || "trending".equals(sort) || sort == null || sort.isBlank())) {
+                    // For TV shows without a specified year, restrict to shows started in the past 3 years
+                    // so 25-year-old syndicated daily reruns don't dominate genre discovery.
+                    String threeYearsAgo = java.time.LocalDate.now().minusYears(3).toString();
+                    sb.append("&first_air_date.gte=").append(threeYearsAgo);
+                }
+                if (sort != null && !sort.isBlank()) {
+                    String tmdbSort = "all_time".equals(sort) ? "vote_count.desc" : "popular".equals(sort) || "trending".equals(sort) ? "popularity.desc" : "top_rated".equals(sort) ? "vote_average.desc" : sort;
+                    sb.append("&sort_by=").append(tmdbSort);
+                }
+                requestUrl = sb.toString();
             }
 
-            JsonNode data = restClient.get().uri(sb.toString()).retrieve().body(JsonNode.class);
+            JsonNode data = restClient.get().uri(requestUrl).retrieve().body(JsonNode.class);
             if (data == null || !data.has("results") || !data.get("results").isArray()) {
                 return List.of();
             }
@@ -414,6 +440,67 @@ public class TmdbClient {
             return results;
         } catch (Exception e) {
             log.warn("TMDb search error for query '{}': {}", query, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<MediaItemDto> searchPersons(String query) {
+        if (query == null || query.isBlank()) return List.of();
+        String normalizedQuery = query.trim().toLowerCase();
+        String cacheKey = "tmdb-search-person-" + normalizedQuery;
+
+        Optional<List> cached = cacheService.get(cacheKey, List.class);
+        if (cached.isPresent()) {
+            return objectMapper.convertValue(cached.get(), objectMapper.getTypeFactory().constructCollectionType(List.class, MediaItemDto.class));
+        }
+
+        if (apiKey == null || apiKey.isBlank()) return List.of();
+
+        try {
+            String uri = String.format("%s/search/person?api_key=%s&query=%s&include_adult=false&language=en-US&page=1",
+                    BASE_URL, apiKey, java.net.URLEncoder.encode(normalizedQuery, java.nio.charset.StandardCharsets.UTF_8));
+
+            JsonNode data = restClient.get().uri(uri).retrieve().body(JsonNode.class);
+            if (data == null || !data.has("results") || !data.get("results").isArray()) {
+                return List.of();
+            }
+
+            List<MediaItemDto> results = new ArrayList<>();
+            for (JsonNode item : data.get("results")) {
+                int id = item.path("id").asInt();
+                String name = item.path("name").asText("Unknown");
+                String profile = item.path("profile_path").asText(null);
+                String image = profile != null ? "https://image.tmdb.org/t/p/w500" + profile : null;
+                String department = item.path("known_for_department").asText("Acting");
+
+                List<String> knownTitles = new ArrayList<>();
+                JsonNode knownForNode = item.path("known_for");
+                if (knownForNode.isArray()) {
+                    for (JsonNode kf : knownForNode) {
+                        String kfTitle = kf.hasNonNull("title") ? kf.path("title").asText()
+                                : kf.path("name").asText(null);
+                        if (kfTitle != null && !kfTitle.isBlank()) {
+                            knownTitles.add(kfTitle);
+                        }
+                    }
+                }
+                String description = knownTitles.isEmpty() ? null : "Known for " + String.join(", ", knownTitles);
+
+                MediaItemDto dto = new MediaItemDto();
+                dto.setId("tmdb-" + id);
+                dto.setTitle(name);
+                dto.setType("person");
+                dto.setImage(image);
+                dto.setReleaseDate(department);
+                dto.setDescription(description);
+                dto.setOrigin("TMDB");
+                results.add(dto);
+            }
+
+            cacheService.put(cacheKey, "tmdb", results, 24 * 3600);
+            return results;
+        } catch (Exception e) {
+            log.warn("TMDb person search error for query '{}': {}", query, e.getMessage());
             return List.of();
         }
     }

@@ -34,8 +34,22 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
   }
 
   // "Known For" horizontal carousel: top 6 performing items
-  const allCredits = [...profile.credits.cast, ...profile.credits.crew];
-  const uniqueCredits = Array.from(new Map(allCredits.map(c => [c.mediaId || c.title, c])).values());
+  const isActor = profile.knownForDepartment?.toLowerCase().includes("act") ?? true;
+  const primaryCredits = isActor ? profile.credits.cast : profile.credits.crew;
+  const secondaryCredits = isActor ? profile.credits.crew : profile.credits.cast;
+
+  // Filter out pure "Self" / talk show / interview appearances from Known For if real character/creative roles exist
+  const filteredPrimary = primaryCredits.filter(c => {
+    const roleLower = (c.role || "").toLowerCase().trim();
+    return !roleLower.startsWith("self") && !roleLower.startsWith("himself") && !roleLower.startsWith("herself");
+  });
+
+  const combinedCredits = [
+    ...(filteredPrimary.length > 0 ? filteredPrimary : primaryCredits),
+    ...secondaryCredits
+  ];
+
+  const uniqueCredits = Array.from(new Map(combinedCredits.map(c => [c.mediaId || c.title, c])).values());
 
   const mediaIds = uniqueCredits.map(c => c.mediaId).filter(Boolean) as string[];
   const statsMap: Record<string, number> = {};
@@ -47,15 +61,41 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
     listRank: credit.mediaId ? rankMap[credit.mediaId] : null,
   }));
 
-  // Sort by communityScore, fallback to recent year
+  // If local database has community scores, prioritize them;
+  // otherwise maintain the provider's authoritative vote_count/popularity order!
   creditsWithStats.sort((a, b) => {
-    if (a.communityScore !== b.communityScore) return (b.communityScore || 0) - (a.communityScore || 0);
-    return (b.releaseYear || 0) - (a.releaseYear || 0);
+    if (a.communityScore && b.communityScore && a.communityScore !== b.communityScore) {
+      return b.communityScore - a.communityScore;
+    }
+    if (a.communityScore && !b.communityScore) return -1;
+    if (!a.communityScore && b.communityScore) return 1;
+    return 0;
   });
 
   const topKnownFor = creditsWithStats.slice(0, 6);
 
   // Credits are grouped and sorted in the client component
+
+  const formatBirthOrDeathDate = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    const parts = dateStr.trim().split("-");
+    if (parts.length !== 3) return dateStr;
+    const year = parts[0];
+    const monthIndex = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+
+    const months = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    if (monthIndex < 0 || monthIndex > 11 || isNaN(day)) return dateStr;
+
+    const s = ["th", "st", "nd", "rd"];
+    const v = day % 100;
+    const ordinal = day + (s[(v - 20) % 10] || s[v] || s[0]);
+
+    return `${year} ${months[monthIndex]} ${ordinal}`;
+  };
 
   const calculateAge = (birth?: string | null, death?: string | null) => {
     if (!birth) return null;
@@ -78,7 +118,7 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
         <BackToSearchButton />
 
         {/* Hero Section */}
-        <section className="flex flex-col md:flex-row gap-12 lg:gap-16">
+        <section className="flex flex-col md:flex-row gap-10 lg:gap-14 items-start">
           <div className="w-full md:w-1/3 lg:w-1/4 shrink-0">
             {profile.profileImage ? (
               <img src={profile.profileImage} alt={profile.name} className="w-full rounded-3xl shadow-2xl shadow-black/50 border border-gray-800 object-cover aspect-[2/3]" />
@@ -87,35 +127,35 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
             )}
           </div>
 
-          <div className="flex-1 flex flex-col justify-center space-y-8">
+          <div className="flex-1 flex flex-col justify-start space-y-5 min-w-0">
             <div>
-              <h1 className="text-5xl sm:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 tracking-tight leading-tight">
+              <h1 className="text-4xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 tracking-tight leading-tight">
                 {profile.name}
               </h1>
               {profile.nativeName && (
-                <h2 className="text-2xl font-bold text-gray-500 mt-2 tracking-wide">{profile.nativeName}</h2>
+                <h2 className="text-xl font-bold text-gray-500 mt-1 tracking-wide">{profile.nativeName}</h2>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-4 text-sm font-bold text-gray-400 bg-gray-900/50 p-6 rounded-2xl border border-gray-800/50 inline-flex">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-sm font-bold text-gray-400 bg-gray-900/50 p-4 sm:p-5 rounded-2xl border border-gray-800/50 inline-flex w-fit">
               {profile.knownForDepartment && (
                 <div>
-                  <span className="text-[10px] text-gray-500 uppercase tracking-widest block mb-1">Department</span>
+                  <span className="text-[10px] text-gray-500 uppercase tracking-widest block mb-0.5">Department</span>
                   <span className="text-gray-200">{profile.knownForDepartment}</span>
                 </div>
               )}
               {profile.birthDate && (
                 <div>
-                  <span className="text-[10px] text-gray-500 uppercase tracking-widest block mb-1">Born</span>
-                  <span className="text-gray-200">{profile.birthDate} {age && !profile.deathDate ? `(Age ${age})` : ''}</span>
+                  <span className="text-[10px] text-gray-500 uppercase tracking-widest block mb-0.5">Born</span>
+                  <span className="text-gray-200">{formatBirthOrDeathDate(profile.birthDate)} {age && !profile.deathDate ? `(Age ${age})` : ''}</span>
                 </div>
               )}
               {profile.deathDate && (
                 <>
-                  <div className="w-px h-10 bg-gray-800 hidden sm:block" />
+                  <div className="w-px h-8 bg-gray-800 hidden sm:block" />
                   <div>
-                    <span className="text-[10px] text-gray-500 uppercase tracking-widest block mb-1">Died</span>
-                    <span className="text-gray-200">{profile.deathDate} {age ? `(Age ${age})` : ''}</span>
+                    <span className="text-[10px] text-gray-500 uppercase tracking-widest block mb-0.5">Died</span>
+                    <span className="text-gray-200">{formatBirthOrDeathDate(profile.deathDate)} {age ? `(Age ${age})` : ''}</span>
                   </div>
                 </>
               )}
@@ -123,9 +163,9 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
 
             {profile.bio && (
               <div className="max-w-3xl">
-                <h3 className="text-lg font-bold mb-4 text-gray-300">Biography</h3>
+                <h3 className="text-base font-bold mb-2 text-gray-300">Biography</h3>
                 <div className="prose prose-invert prose-gray max-w-none text-gray-400 leading-relaxed">
-                  <ExpandableText text={profile.bio} maxLength={500} />
+                  <ExpandableText text={profile.bio} lineClamp={3} />
                 </div>
               </div>
             )}
