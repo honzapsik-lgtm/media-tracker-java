@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { MediaItem } from "@/types";
+import { coverSrc } from "@/lib/images";
 
 interface RankListSelectModalProps {
   item: MediaItem;
@@ -174,7 +175,7 @@ export default function RankListSelectModal({ item, onClose }: RankListSelectMod
                 >
                   <span className={`font-black w-6 text-center ${listItem.isNew ? 'text-blue-400' : 'text-gray-500'}`}>{index + 1}</span>
                   {listItem.image ? (
-                    <img src={listItem.image} alt={listItem.title} className="w-8 h-12 object-cover rounded" />
+                    <img src={coverSrc(listItem.image)} alt={listItem.title} className="w-8 h-12 object-cover rounded" />
                   ) : (
                     <div className="w-8 h-12 bg-gray-800 rounded"></div>
                   )}

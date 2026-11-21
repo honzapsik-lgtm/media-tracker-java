@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { coverSrc } from "@/lib/images";
 
 type ListCategory = "watch" | "play" | "read";
 
@@ -24,6 +25,35 @@ interface WatchlistItem {
   is_rewatching?: boolean;
   is_rereading?: boolean;
 }
+
+// Toolkit links into the profile tabs (?tab= is read by ProfileTabs) plus Settings.
+const PROFILE_LINKS: { label: string; href: string; color: string; icon: string }[] = [
+  { label: "All Ratings", href: "/profile", color: "amber",
+    icon: "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" },
+  { label: "Written Reviews", href: "/profile?tab=reviews", color: "sky",
+    icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
+  { label: "Ranking Lists", href: "/profile?tab=top100", color: "orange",
+    icon: "M4 6h16M4 10h16M4 14h10M4 18h6" },
+  { label: "Statistics", href: "/profile?tab=stats", color: "cyan",
+    icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+  { label: "Achievements", href: "/profile?tab=achievements", color: "yellow",
+    icon: "M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" },
+  { label: "Friends", href: "/profile?tab=friends", color: "fuchsia",
+    icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" },
+  { label: "Settings", href: "/settings", color: "slate",
+    icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" },
+];
+
+// Full class strings so Tailwind keeps them.
+const LINK_COLORS: Record<string, { box: string; arrow: string }> = {
+  amber: { box: "bg-amber-900/30 border-amber-500/50 text-amber-400", arrow: "group-hover:text-amber-400" },
+  sky: { box: "bg-sky-900/30 border-sky-500/50 text-sky-400", arrow: "group-hover:text-sky-400" },
+  orange: { box: "bg-orange-900/30 border-orange-500/50 text-orange-400", arrow: "group-hover:text-orange-400" },
+  cyan: { box: "bg-cyan-900/30 border-cyan-500/50 text-cyan-400", arrow: "group-hover:text-cyan-400" },
+  yellow: { box: "bg-yellow-900/30 border-yellow-500/50 text-yellow-400", arrow: "group-hover:text-yellow-400" },
+  fuchsia: { box: "bg-fuchsia-900/30 border-fuchsia-500/50 text-fuchsia-400", arrow: "group-hover:text-fuchsia-400" },
+  slate: { box: "bg-slate-800/50 border-slate-500/50 text-slate-300", arrow: "group-hover:text-slate-300" },
+};
 
 export default function AppDrawer() {
   const router = useRouter();
@@ -252,6 +282,31 @@ export default function AppDrawer() {
                 <svg className="w-5 h-5 text-gray-600 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
 
+              {/* Profile shortcuts */}
+              {session && (
+                <div className="pt-4 mt-2 border-t border-gray-800/80 space-y-3">
+                  <p className="px-1 text-[11px] font-black uppercase tracking-wider text-gray-500">Profile</p>
+                  {PROFILE_LINKS.map((link) => {
+                    const c = LINK_COLORS[link.color];
+                    return (
+                      <button
+                        key={link.href}
+                        onClick={() => { handleClose(); router.push(link.href); }}
+                        className="w-full flex items-center justify-between p-4 bg-gray-900 border border-gray-800 rounded-xl hover:bg-gray-800 hover:border-gray-700 transition-all group"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 border rounded-lg flex items-center justify-center ${c.box}`}>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={link.icon} /></svg>
+                          </div>
+                          <span className="font-bold text-gray-200 group-hover:text-white">{link.label}</span>
+                        </div>
+                        <svg className={`w-5 h-5 text-gray-600 transition-colors ${c.arrow}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Admin Actions (Visible only for admins) */}
               {isAdmin && (
                 <div className="pt-4 mt-2 border-t border-gray-800/80 space-y-3">
@@ -374,7 +429,7 @@ export default function AppDrawer() {
                   return (
                     <div key={item.media_id} className="flex gap-4 bg-gray-900 border border-gray-800 p-3 rounded-xl group relative hover:border-gray-700 transition-colors">
                       {item.media_image ? (
-                        <img src={item.media_image} alt={item.media_title ?? "Media"} className="h-20 w-14 rounded-md object-cover self-start" />
+                        <img src={coverSrc(item.media_image)} alt={item.media_title ?? "Media"} className="h-20 w-14 rounded-md object-cover self-start" />
                       ) : (
                         <div className="h-20 w-14 rounded-md bg-gray-900 border border-gray-800 self-start" />
                       )}

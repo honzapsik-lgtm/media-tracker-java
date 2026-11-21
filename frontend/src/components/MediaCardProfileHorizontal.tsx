@@ -2,6 +2,7 @@ import Link from "next/link";
 import { useState } from "react";
 import RankListSelectModal from "@/components/RankListSelectModal";
 import GlobalRatingModal from "@/components/GlobalRatingModal";
+import { coverSrc } from "@/lib/images";
 
 export interface ProfileMediaItem {
   mediaId: string;
@@ -70,7 +71,7 @@ export default function MediaCardProfileHorizontal({
       {/* Thumbnail */}
       <Link href={`/media/${item.mediaId}`} className="shrink-0 block">
         {image ? (
-          <img src={image} className="w-12 h-16 object-cover rounded-md shadow-md" alt={title || "Cover"} />
+          <img src={coverSrc(image)} className="w-12 h-16 object-cover rounded-md shadow-md" alt={title || "Cover"} />
         ) : (
           <div className="w-12 h-16 bg-gray-950 border border-gray-800 rounded-md flex items-center justify-center text-[9px] font-bold text-gray-600 text-center">NO IMG</div>
         )}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { coverSrc } from "@/lib/images";
 
 interface MediaItem {
   id: string;
@@ -121,7 +122,7 @@ export default function SearchBar() {
                   >
                     <div className={`w-10 h-14 bg-gray-800 ${isPerson ? 'rounded-full w-11 h-11' : 'rounded'} overflow-hidden shrink-0 flex items-center justify-center`}>
                       {item.image ? (
-                        <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                        <img src={coverSrc(item.image)} alt={item.title} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 text-center font-bold">
                           {isPerson ? (item.title ? item.title.charAt(0) : "P") : "No Img"}

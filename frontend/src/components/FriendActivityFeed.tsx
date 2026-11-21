@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
   Layers,
 } from "lucide-react";
+import { coverSrc } from "@/lib/images";
 
 interface ActivityUser {
   id: string;
@@ -272,7 +273,7 @@ export default function FriendActivityFeed() {
                   >
                     {act.media_image ? (
                       <img
-                        src={act.media_image}
+                        src={coverSrc(act.media_image)}
                         alt={act.media_title || "Media"}
                         onError={(e) => {
                           const target = e.currentTarget;

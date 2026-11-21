@@ -41,6 +41,13 @@ export interface ContentRecommendation {
   }>;
 }
 
+export interface GenreRecommendation {
+  genre: string;
+  genreSlug: string;
+  type: string;
+  recommendations: ContentRecommendation['recommendations'];
+}
+
 export interface TwinTasteData {
   authenticated: boolean;
   hasRatings: boolean;
@@ -48,7 +55,29 @@ export interface TwinTasteData {
   topTwins: TwinProfile[];
   twinRecommendations: TwinMediaRecommendation[];
   contentRecommendation: ContentRecommendation | null;
+  contentRecommendations?: ContentRecommendation[];
+  genreRecommendations?: GenreRecommendation[];
 }
+
+const cardRow = (items: ContentRecommendation['recommendations']) => (
+  <Carousel>
+    {items.map((item) => (
+      <div key={item.id} className="flex-none w-40 sm:w-48 lg:w-56 snap-start">
+        <MediaCardVertical
+          item={{
+            id: item.id,
+            title: item.title,
+            type: item.type,
+            image: item.image,
+            releaseDate: item.releaseDate,
+            communityScore: item.communityScore,
+            listRank: item.listRank,
+          }}
+        />
+      </div>
+    ))}
+  </Carousel>
+);
 
 export default function TwinTasteRecommendations({ data }: { data: TwinTasteData | null }) {
   if (!data) return null;
@@ -99,9 +128,15 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
 
   const hasTwins = data.topTwins && data.topTwins.length > 0;
   const hasTwinRecs = data.twinRecommendations && data.twinRecommendations.length > 0;
-  const hasContentRec = data.contentRecommendation && data.contentRecommendation.recommendations.length > 0;
+  const contentRecs = (data.contentRecommendations?.length
+    ? data.contentRecommendations
+    : data.contentRecommendation ? [data.contentRecommendation] : []
+  ).filter((c) => c.recommendations.length > 0);
+  const genreRecs = (data.genreRecommendations || []).filter((g) => g.recommendations.length > 0);
+  const hasContentRec = contentRecs.length > 0;
+  const hasGenreRecs = genreRecs.length > 0;
 
-  if (!hasTwins && !hasTwinRecs && !hasContentRec) {
+  if (!hasTwins && !hasTwinRecs && !hasContentRec && !hasGenreRecs) {
     return (
       <div className="mb-12 rounded-2xl border border-gray-800 bg-gray-900/50 p-6">
         <div className="flex items-center gap-2 mb-2">
@@ -188,36 +223,57 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
         </div>
       )}
 
-      {/* Because You Loved [Title] */}
-      {hasContentRec && data.contentRecommendation && (
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-2xl font-bold tracking-wide text-gray-100">
-              Because You Loved <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">{data.contentRecommendation.sourceTitle}</span>
-            </h2>
-            <span className="text-xs font-semibold text-blue-400 px-2 py-0.5 rounded bg-blue-950/60 border border-blue-800/50">
-              Rated {data.contentRecommendation.sourceScore}%
-            </span>
-          </div>
-          <Carousel>
-            {data.contentRecommendation.recommendations.map((item) => (
-              <div key={item.id} className="flex-none w-40 sm:w-48 lg:w-56 snap-start">
-                <MediaCardVertical
-                  item={{
-                    id: item.id,
-                    title: item.title,
-                    type: item.type,
-                    image: item.image,
-                    releaseDate: item.releaseDate,
-                    communityScore: item.communityScore,
-                    listRank: item.listRank,
-                  }}
-                />
-              </div>
-            ))}
-          </Carousel>
+      {/* No twins yet: explain why instead of silently hiding the section */}
+      {!hasTwins && (
+        <div className="rounded-2xl border border-gray-800 bg-gray-900/50 p-5">
+          <h2 className="text-lg font-black text-white mb-1">Your Taste Twins</h2>
+          <p className="text-sm text-gray-400">
+            No twins yet. Twins are other users who rated at least one of the same titles as you with similar scores.
+            You have {data.userRatingsCount} rating{data.userRatingsCount === 1 ? '' : 's'}; the more popular titles you rate, the more likely someone overlaps with you.
+          </p>
         </div>
       )}
+
+      {/* Because You Loved [Title] */}
+      {contentRecs.map((rec) => (
+        <div key={rec.sourceMediaId}>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <h2 className="text-2xl font-bold tracking-wide text-gray-100">
+              Because You Loved{' '}
+              <Link href={`/media/${rec.sourceMediaId}`} className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 hover:underline">
+                {rec.sourceTitle}
+              </Link>
+            </h2>
+            <span className="text-xs font-semibold text-blue-400 px-2 py-0.5 rounded bg-blue-950/60 border border-blue-800/50">
+              Rated {rec.sourceScore}%
+            </span>
+          </div>
+          {cardRow(rec.recommendations)}
+        </div>
+      ))}
+
+      {/* Favourite genres */}
+      {genreRecs.map((g) => (
+        <div key={`${g.type}-${g.genreSlug}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-2xl font-bold tracking-wide text-gray-100">
+                Top {g.type === 'show' ? 'Shows' : 'Movies'} in <span className="text-emerald-400">{g.genre}</span>
+              </h2>
+              <span className="text-xs font-semibold text-emerald-400 px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/50">
+                One of your favourite genres
+              </span>
+            </div>
+            <Link
+              href={`/discover?type=${g.type}&genre=${g.genreSlug}&sort=all_time`}
+              className="text-sm font-bold text-gray-400 hover:text-white transition-colors"
+            >
+              See all →
+            </Link>
+          </div>
+          {cardRow(g.recommendations)}
+        </div>
+      ))}
     </div>
   );
 }

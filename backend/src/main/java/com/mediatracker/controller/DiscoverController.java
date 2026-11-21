@@ -11,8 +11,10 @@ import com.mediatracker.repository.MediaStatsRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -120,30 +122,42 @@ public class DiscoverController {
         }
     }
 
+    /** Reads a repeatable query param (?keyword=a&keyword=b) without splitting values on commas. */
+    private static List<String> multiParam(HttpServletRequest request, String name) {
+        String[] values = request.getParameterValues(name);
+        if (values == null) return List.of();
+        return Arrays.stream(values).map(String::trim).filter(v -> !v.isEmpty()).distinct().limit(10).toList();
+    }
+
     @GetMapping
-    @Operation(summary = "Discover media by type, genre, year, sort, and page")
+    @Operation(summary = "Discover media by type, genres (repeatable), keywords (repeatable), year, sort, and page")
     public ResponseEntity<List<DiscoverItemDto>> discoverMedia(
+            HttpServletRequest request,
             @RequestParam(defaultValue = "movie") String type,
-            @RequestParam(required = false) String genre,
             @RequestParam(required = false) String year,
             @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "1") int page) {
 
         String cleanType = type.trim().toLowerCase();
-        String cleanGenre = genre != null ? genre.trim().toLowerCase().replaceAll("[^a-z0-9]", "") : "";
+        List<String> cleanGenres = multiParam(request, "genre").stream()
+                .flatMap(g -> Arrays.stream(g.split(",")))
+                .map(g -> g.trim().toLowerCase().replaceAll("[^a-z0-9]", ""))
+                .filter(g -> !g.isEmpty()).distinct().toList();
+        List<String> keywords = multiParam(request, "keyword");
 
         if ("movie".equals(cleanType) || "show".equals(cleanType) || "tv".equals(cleanType)) {
             boolean isMovie = "movie".equals(cleanType);
-            Integer tmdbGenreId = isMovie ? TMDB_MOVIE_GENRES.get(cleanGenre) : TMDB_SHOW_GENRES.get(cleanGenre);
-            List<DiscoverItemDto> items = tmdbClient.discover(isMovie ? "movie" : "tv", tmdbGenreId, year, sort, page);
+            Map<String, Integer> genreMap = isMovie ? TMDB_MOVIE_GENRES : TMDB_SHOW_GENRES;
+            List<Integer> tmdbGenreIds = cleanGenres.stream().map(genreMap::get).filter(Objects::nonNull).distinct().toList();
+            List<DiscoverItemDto> items = tmdbClient.discover(isMovie ? "movie" : "tv", tmdbGenreIds, keywords, year, sort, page);
             attachDatabaseStatsAndRanks(items);
             return ResponseEntity.ok(items);
         } else if ("game".equals(cleanType)) {
-            List<DiscoverItemDto> items = igdbClient.discover(cleanGenre, year, sort, page);
+            List<DiscoverItemDto> items = igdbClient.discover(cleanGenres, keywords, year, sort, page);
             attachDatabaseStatsAndRanks(items);
             return ResponseEntity.ok(items);
         } else if ("manga".equals(cleanType)) {
-            List<DiscoverItemDto> items = anilistClient.discoverManga(cleanGenre, year, sort, page);
+            List<DiscoverItemDto> items = anilistClient.discoverManga(cleanGenres, keywords, year, sort, page);
             attachDatabaseStatsAndRanks(items);
             return ResponseEntity.ok(items);
         }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { coverSrc } from "@/lib/images";
 
 interface LiveSearchModalProps {
   isOpen: boolean;
@@ -90,7 +91,7 @@ export default function LiveSearchModal({ isOpen, onClose, mediaType, onSelect }
                   className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-800 transition-colors text-left group"
                 >
                   {item.image ? (
-                    <img src={item.image} alt={item.title} className="w-12 h-16 object-cover rounded bg-gray-800" />
+                    <img src={coverSrc(item.image)} alt={item.title} className="w-12 h-16 object-cover rounded bg-gray-800" />
                   ) : (
                     <div className="w-12 h-16 bg-gray-800 rounded flex items-center justify-center text-gray-600 text-xs">No Img</div>
                   )}

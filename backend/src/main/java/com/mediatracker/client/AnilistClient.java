@@ -324,14 +324,17 @@ public class AnilistClient {
         return List.of();
     }
 
-    public List<DiscoverItemDto> discoverManga(String genre, String year, String sort, int page) {
-        String cacheKey = String.format("discover-manga-%s-%s-%s-%d",
-                genre != null ? genre : "all", year != null ? year : "all", sort != null ? sort : "default", page);
+    private static final Set<String> ANILIST_GENRES = Set.of(
+            "action", "adventure", "comedy", "drama", "ecchi", "fantasy", "hentai", "horror", "mahou shoujo",
+            "mecha", "music", "mystery", "psychological", "romance", "sci-fi", "slice of life", "sports",
+            "supernatural", "thriller");
 
-        Optional<List> cached = cacheService.get(cacheKey, List.class);
-        if (cached.isPresent()) {
-            return objectMapper.convertValue(cached.get(), objectMapper.getTypeFactory().constructCollectionType(List.class, DiscoverItemDto.class));
-        }
+    public List<DiscoverItemDto> discoverManga(String genre, String year, String sort, int page) {
+        return discoverManga(genre != null && !genre.isBlank() ? List.of(genre) : List.of(), List.of(), year, sort, page);
+    }
+
+    /** Discover manga matching all given genre filters and all given keywords (AniList genres or tags, by name). */
+    public List<DiscoverItemDto> discoverManga(List<String> genres, List<String> keywords, String year, String sort, int page) {
 
         Map<String, Map<String, String>> anilistGenreMap = Map.ofEntries(
                 Map.entry("action", Map.of("genre", "Action")),
@@ -363,13 +366,39 @@ public class AnilistClient {
                 Map.entry("music", Map.of("genre", "Music"))
         );
 
-        String normalizedGenre = genre != null ? genre.trim().toLowerCase().replaceAll("[^a-z0-9]", "") : "";
-        Map<String, String> mapped = anilistGenreMap.get(normalizedGenre);
+        Set<String> genreIn = new TreeSet<>();
+        Set<String> tagIn = new TreeSet<>();
+        for (String g : genres != null ? genres : List.<String>of()) {
+            Map<String, String> mapped = anilistGenreMap.get(g.trim().toLowerCase().replaceAll("[^a-z0-9]", ""));
+            if (mapped == null) continue;
+            if (mapped.containsKey("genre")) genreIn.add(mapped.get("genre"));
+            if (mapped.containsKey("tag")) tagIn.add(mapped.get("tag"));
+        }
+        for (String kw : keywords != null ? keywords : List.<String>of()) {
+            String name = kw.trim();
+            if (name.isEmpty()) continue;
+            if (ANILIST_GENRES.contains(name.toLowerCase(Locale.ROOT))) {
+                // AniList genre names are case-sensitive; reuse the canonical spelling from the map where possible
+                Map<String, String> mapped = anilistGenreMap.get(name.toLowerCase().replaceAll("[^a-z0-9]", ""));
+                genreIn.add(mapped != null && mapped.containsKey("genre") ? mapped.get("genre") : name);
+            } else {
+                tagIn.add(name);
+            }
+        }
+
+        String cacheKey = String.format("discover-manga-g%s-t%s-%s-%s-%d",
+                genreIn.isEmpty() ? "all" : String.join(",", genreIn), tagIn.isEmpty() ? "none" : String.join(",", tagIn),
+                year != null ? year : "all", sort != null ? sort : "default", page);
+
+        Optional<List> cached = cacheService.get(cacheKey, List.class);
+        if (cached.isPresent()) {
+            return objectMapper.convertValue(cached.get(), objectMapper.getTypeFactory().constructCollectionType(List.class, DiscoverItemDto.class));
+        }
 
         String gql = """
-            query ($genre: String, $tag: String, $sort: [MediaSort], $year: String, $page: Int) {
+            query ($genres: [String], $tags: [String], $sort: [MediaSort], $year: String, $page: Int) {
               Page(page: $page, perPage: 12) {
-                media(type: MANGA, genre: $genre, tag: $tag, sort: $sort, startDate_like: $year) {
+                media(type: MANGA, genre_in: $genres, tag_in: $tags, sort: $sort, startDate_like: $year) {
                   id
                   title { english romaji }
                   coverImage { large extraLarge }
@@ -389,8 +418,8 @@ public class AnilistClient {
         Map<String, Object> vars = new HashMap<>();
         vars.put("page", page);
         vars.put("sort", sortList);
-        if (mapped != null && mapped.containsKey("genre")) vars.put("genre", mapped.get("genre"));
-        if (mapped != null && mapped.containsKey("tag")) vars.put("tag", mapped.get("tag"));
+        if (!genreIn.isEmpty()) vars.put("genres", new ArrayList<>(genreIn));
+        if (!tagIn.isEmpty()) vars.put("tags", new ArrayList<>(tagIn));
         if (year != null && !year.isBlank() && year.matches("^\\d{4}$")) vars.put("year", year + "%");
 
         try {

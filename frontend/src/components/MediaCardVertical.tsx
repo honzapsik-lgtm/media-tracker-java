@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MediaItem } from "@/types";
 import MediaActionMenu from "./MediaActionMenu";
+import { coverSrc } from "@/lib/images";
 
 const getScoreColor = (score: number | null | undefined) => {
   if (score === null || score === undefined) return "bg-gray-900/80 text-gray-500 border-gray-700";
@@ -32,7 +33,7 @@ export default function MediaCardVertical({ item }: { item: MediaItem }) {
         
         {/* Poster Image */}
         {item.image ? (
-          <img src={item.image} alt={item.title} className="w-full h-auto object-cover aspect-[2/3] rounded-t-xl group-hover:opacity-80 transition-opacity" />
+          <img src={coverSrc(item.image)} alt={item.title} className="w-full h-auto object-cover aspect-[2/3] rounded-t-xl group-hover:opacity-80 transition-opacity" />
         ) : (
           <div className="w-full aspect-[2/3] bg-gray-800 rounded-t-xl flex items-center justify-center text-gray-500 p-4 text-center">No Image</div>
         )}

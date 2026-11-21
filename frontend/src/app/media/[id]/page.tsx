@@ -23,6 +23,7 @@ import { getMediaPageDetails, cleanStudioData, getMediaRankings } from "@/lib/me
 import { getRatings } from "@/lib/api-client";
 
 
+import { coverSrc } from "@/lib/images";
 
 const getScoreColor = (score: number | null | undefined) => {
   if (score === null || score === undefined) return "text-gray-500";
@@ -243,7 +244,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
     <main className="min-h-screen bg-gray-950 text-white relative pb-24">
       {mediaDetails.backdrop && (
         <>
-          <div className="absolute top-0 left-0 w-full h-[60vh] opacity-20 bg-cover bg-center" style={{ backgroundImage: `url(${mediaDetails.backdrop})` }} />
+          <div className="absolute top-0 left-0 w-full h-[60vh] opacity-20 bg-cover bg-center" style={{ backgroundImage: `url(${coverSrc(mediaDetails.backdrop)})` }} />
           <div className="absolute top-0 left-0 w-full h-[60vh] bg-gradient-to-t from-gray-950 to-transparent" />
         </>
       )}
@@ -254,7 +255,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
         <div className="flex flex-col md:flex-row gap-10 mb-16">
           <div className="w-full md:w-1/3 lg:w-1/4 shrink-0 space-y-6">
             {mediaDetails.image ? (
-              <img src={mediaDetails.image} alt={mediaDetails.title} className="w-full rounded-2xl shadow-2xl shadow-black/50 border border-gray-800" />
+              <img src={coverSrc(mediaDetails.image)} alt={mediaDetails.title} className="w-full rounded-2xl shadow-2xl shadow-black/50 border border-gray-800" />
             ) : (
               <div className="w-full aspect-[2/3] bg-gray-900 rounded-2xl border border-gray-800 flex items-center justify-center">No Image</div>
             )}
@@ -319,7 +320,8 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
                   {mediaDetails.keywords.slice(0, 30).map((kw: string) => (
                     <Link
                       key={kw}
-                      href={`/search?q=${encodeURIComponent(kw)}`}
+                      href={`/discover?type=${mediaTypeKey}&keyword=${encodeURIComponent(kw)}`}
+                      title={`Browse ${mediaTypeKey === 'show' ? 'shows' : mediaTypeKey + 's'} tagged "${kw}"`}
                       className="bg-gray-900/80 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 text-gray-400 hover:text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
                     >
                       {kw}

@@ -73,9 +73,14 @@ export async function discoverMedia(
   genre = "",
   year = "",
   sort = "popular",
-  page = 1
+  page = 1,
+  keywords: string[] = []
 ) {
-  const params = new URLSearchParams({ type, genre, year, sort, page: String(page) });
+  const params = new URLSearchParams({ type, year, sort, page: String(page) });
+  // `genre` may carry several comma-separated genre slugs; keywords are repeated params
+  // because keyword names themselves can contain commas.
+  for (const g of genre.split(",").map((s) => s.trim()).filter(Boolean)) params.append("genre", g);
+  for (const kw of keywords.map((s) => s.trim()).filter(Boolean)) params.append("keyword", kw);
   return apiFetch<any[]>(`/discover?${params.toString()}`);
 }
 

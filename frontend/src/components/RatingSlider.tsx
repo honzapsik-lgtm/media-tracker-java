@@ -28,7 +28,12 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
   const router = useRouter();
   const [rating, setRating] = useState<number>(initialRating);
   const [hasRated, setHasRated] = useState<boolean>(false);
-  const isDeepReview = true;
+  // Sub-scores stay hidden until the user opens "Advanced rating"; only then are they saved.
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  // True when the saved rating already has sub-scores, so a master-only update keeps them.
+  const [hasSavedCriteria, setHasSavedCriteria] = useState<boolean>(
+    !!initialCriteria && Object.keys(initialCriteria).length > 0
+  );
   
   const [criteria, setCriteria] = useState<Record<string, number>>(() => {
     const config = CRITERIA_CONFIG[mediaType] || [];
@@ -44,6 +49,7 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
     if (initialCriteria && Object.keys(initialCriteria).length > 0) {
       setCriteria(prev => ({ ...prev, ...initialCriteria }));
       setHasRated(true);
+      setHasSavedCriteria(true);
     }
   }, [initialCriteria]);
 
@@ -78,8 +84,12 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
         setRating(data.personal.score);
         setHasRated(true);
         const scores = data.personal.criteriaScores || data.personal.criteria_scores;
-        if (scores && typeof scores === "object") {
+        const isDeep = data.personal.isDeepReview ?? data.personal.is_deep_review;
+        if (scores && typeof scores === "object" && Object.keys(scores).length > 0) {
           setCriteria(prev => ({ ...prev, ...scores }));
+          setHasSavedCriteria(isDeep !== false);
+        } else {
+          setHasSavedCriteria(false);
         }
       }
 
@@ -103,7 +113,9 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
   const handleSave = async () => {
     setIsSaving(true); setMessage(null);
     try {
-      const payloadCriteria = criteria;
+      // Expanded: save the sub-scores. Collapsed: send none, so the backend keeps any saved earlier.
+      const payloadCriteria = showAdvanced ? criteria : undefined;
+      const isDeepReview = showAdvanced || hasSavedCriteria;
 
       const res = await fetch("/api/ratings", {
         method: "POST",
@@ -140,8 +152,21 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
 
   return (
     <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-md w-full space-y-6 shadow-xl">
-      <div className="flex justify-between items-center border-b border-gray-800 pb-3">
-        <h3 className="font-black text-xl tracking-tight text-white">Your Rating</h3>
+      <div className="flex justify-between items-center gap-3 border-b border-gray-800 pb-3">
+        <h3 className="font-black text-xl tracking-tight text-white whitespace-nowrap">Your Rating</h3>
+        {(CRITERIA_CONFIG[mediaType] || []).length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-expanded={showAdvanced}
+            title={!showAdvanced && hasSavedCriteria ? "Advanced sub-scores saved" : undefined}
+            className={`shrink-0 flex items-center gap-1.5 text-xs font-bold border rounded-lg px-2.5 py-1.5 transition-colors ${showAdvanced ? "text-white border-blue-500/50 bg-blue-500/10" : "text-gray-400 hover:text-white bg-gray-950/50 border-gray-800 hover:border-gray-700"}`}
+          >
+            {!showAdvanced && hasSavedCriteria && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" aria-hidden="true" />}
+            <span>Advanced</span>
+            <span className={`transition-transform ${showAdvanced ? "rotate-180" : ""}`}>▾</span>
+          </button>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -152,6 +177,7 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
         <input type="range" min="0" max="100" value={rating} onChange={(e) => setRating(Number(e.target.value))} className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-500" />
       </div>
 
+      {showAdvanced && (
       <div className="space-y-4 bg-gray-950/50 p-4 rounded-xl border border-gray-800">
         {(CRITERIA_CONFIG[mediaType] || []).map((item) => (
           <div key={item.key} className="space-y-1.5">
@@ -163,6 +189,7 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
           </div>
         ))}
       </div>
+      )}
 
       {message && <div className={`p-3 rounded-lg text-xs font-bold text-center border ${message.type === "success" ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>{message.text}</div>}
       <button onClick={handleSave} disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 text-white font-black py-3 px-4 rounded-xl transition-all tracking-wide text-sm shadow-lg shadow-blue-600/10">

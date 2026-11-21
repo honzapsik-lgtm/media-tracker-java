@@ -374,11 +374,30 @@ public class IgdbClient {
     }
 
     public List<DiscoverItemDto> discover(String genre, String year, String sort, int page) {
+        return discover(genre != null && !genre.isBlank() ? List.of(genre) : List.of(), List.of(), year, sort, page);
+    }
+
+    /** Discover games matching all given genres and all given keywords (IGDB themes or keywords, by name). */
+    public List<DiscoverItemDto> discover(List<String> genres, List<String> keywords, String year, String sort, int page) {
         String token = getAccessToken();
         if (token.isBlank()) return List.of();
 
-        String cacheKey = String.format("discover-game-%s-%s-%s-%d",
-                genre != null ? genre : "all", year != null ? year : "all", sort != null ? sort : "default", page);
+        List<String> normalizedGenres = (genres != null ? genres : List.<String>of()).stream()
+                .map(g -> g.trim().toLowerCase().replaceAll("[^a-z0-9]", ""))
+                .filter(g -> !g.isEmpty()).distinct().sorted().toList();
+        List<String> kwNames = keywords != null ? keywords : List.of();
+
+        List<String> keywordClauses = new ArrayList<>();
+        for (String kw : kwNames) {
+            String clause = resolveKeywordClause(kw, token);
+            if (clause == null) return List.of(); // unknown keyword: nothing can match all filters
+            keywordClauses.add(clause);
+        }
+
+        String cacheKey = String.format("discover-game-%s-kw%s-%s-%s-%d",
+                normalizedGenres.isEmpty() ? "all" : String.join(",", normalizedGenres),
+                keywordClauses.isEmpty() ? "none" : String.join(",", keywordClauses.stream().sorted().toList()),
+                year != null ? year : "all", sort != null ? sort : "default", page);
 
         Optional<List> cached = cacheService.get(cacheKey, List.class);
         if (cached.isPresent()) {
@@ -388,14 +407,14 @@ public class IgdbClient {
         List<String> where = new ArrayList<>();
         where.add("cover != null");
 
-        String normalizedGenre = genre != null ? genre.trim().toLowerCase().replaceAll("[^a-z0-9]", "") : "";
-        applyIgdbGenreFilter(where, normalizedGenre);
+        for (String g : normalizedGenres) applyIgdbGenreFilter(where, g);
+        where.addAll(keywordClauses);
 
         if (year != null && year.matches("^\\d{4}$")) {
             long startTs = java.time.LocalDate.of(Integer.parseInt(year), 1, 1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
             long endTs = java.time.LocalDate.of(Integer.parseInt(year), 12, 31).atTime(23, 59, 59).atZone(ZoneOffset.UTC).toEpochSecond();
             where.add(String.format("first_release_date >= %d & first_release_date <= %d", startTs, endTs));
-        } else if (sort == null || sort.isBlank() || "popular".equals(sort) || "trending".equals(sort)) {
+        } else if (keywordClauses.isEmpty() && (sort == null || sort.isBlank() || "popular".equals(sort) || "trending".equals(sort))) {
             // For trending / popular games without a specified year, restrict to recent releases (past 2 years)
             // so all-time historical classics don't crowd out games that are actually trending right now.
             long recentStartTs = Instant.now().minus(java.time.Duration.ofDays(730)).getEpochSecond();
@@ -462,6 +481,42 @@ public class IgdbClient {
             log.warn("IGDB discover error: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * Turns a keyword name into an IGDB where-clause. Game pages list IGDB themes and keywords together,
+     * so a theme with that name wins, otherwise a keyword. Returns null when neither exists.
+     */
+    private String resolveKeywordClause(String name, String token) {
+        if (name == null || name.isBlank()) return null;
+        String normalized = name.trim().toLowerCase(Locale.ROOT);
+        String cacheKey = "igdb-keyword-clause-" + normalized;
+        Optional<String> cached = cacheService.get(cacheKey, String.class);
+        if (cached.isPresent()) return cached.get().isEmpty() ? null : cached.get();
+
+        String escaped = name.trim().replace("\\", "\\\\").replace("\"", "\\\"");
+        String clause = "";
+        try {
+            for (String endpoint : List.of("themes", "keywords")) {
+                JsonNode data = restClient.post()
+                        .uri(IGDB_BASE_URL + "/" + endpoint)
+                        .header("Client-ID", clientId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body(String.format("fields id, name; where name ~ \"%s\"; limit 1;", escaped))
+                        .retrieve()
+                        .body(JsonNode.class);
+                if (data != null && data.isArray() && !data.isEmpty()) {
+                    clause = String.format("%s = (%d)", endpoint, data.get(0).path("id").asInt());
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("IGDB keyword lookup failed for '{}': {}", name, e.getMessage());
+            return null;
+        }
+        cacheService.put(cacheKey, "igdb", clause, 7 * 24 * 3600);
+        return clause.isEmpty() ? null : clause;
     }
 
     private void applyIgdbGenreFilter(List<String> where, String genre) {

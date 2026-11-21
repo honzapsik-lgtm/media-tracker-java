@@ -32,12 +32,22 @@ public class TwinTasteRecommendationDto {
             List<DiscoverItemDto> recommendations
     ) {}
 
+    /** Popular titles in one of the user's favourite genres (derived from their highly rated TMDb titles). */
+    public record GenreRecommendation(
+            String genre,
+            String genreSlug,
+            String type,
+            List<DiscoverItemDto> recommendations
+    ) {}
+
     private boolean authenticated;
     private boolean hasRatings;
     private int userRatingsCount;
     private List<TwinProfile> topTwins;
     private List<TwinMediaRecommendation> twinRecommendations;
     private ContentRecommendation contentRecommendation;
+    private List<ContentRecommendation> contentRecommendations = List.of();
+    private List<GenreRecommendation> genreRecommendations = List.of();
 
     public TwinTasteRecommendationDto() {}
 
@@ -58,4 +68,8 @@ public class TwinTasteRecommendationDto {
 
     public ContentRecommendation getContentRecommendation() { return contentRecommendation; }
     public void setContentRecommendation(ContentRecommendation contentRecommendation) { this.contentRecommendation = contentRecommendation; }
+    public List<ContentRecommendation> getContentRecommendations() { return contentRecommendations; }
+    public void setContentRecommendations(List<ContentRecommendation> contentRecommendations) { this.contentRecommendations = contentRecommendations; }
+    public List<GenreRecommendation> getGenreRecommendations() { return genreRecommendations; }
+    public void setGenreRecommendations(List<GenreRecommendation> genreRecommendations) { this.genreRecommendations = genreRecommendations; }
 }

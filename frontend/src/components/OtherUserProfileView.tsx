@@ -19,6 +19,7 @@ import {
   Gamepad2,
   Tv,
 } from "lucide-react";
+import { coverSrc } from "@/lib/images";
 
 interface OtherUserProfileViewProps {
   user: {
@@ -266,7 +267,7 @@ export default function OtherUserProfileView({
                     >
                       {act.media_image ? (
                         <img
-                          src={act.media_image}
+                          src={coverSrc(act.media_image)}
                           alt={act.media_title || "Media"}
                           className="w-12 h-16 rounded-lg object-cover border border-zinc-700 shrink-0"
                         />

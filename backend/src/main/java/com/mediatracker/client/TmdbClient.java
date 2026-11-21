@@ -274,8 +274,29 @@ public class TmdbClient {
     }
 
     public List<DiscoverItemDto> discover(String type, Integer genreId, String year, String sort, int page) {
+        return discover(type, genreId != null ? List.of(genreId) : List.of(), List.of(), year, sort, page);
+    }
+
+    /**
+     * Discover with any number of genres and keywords (all must match).
+     * Keywords are keyword names as shown on media pages; they are resolved to TMDb keyword ids.
+     */
+    public List<DiscoverItemDto> discover(String type, List<Integer> genreIds, List<String> keywords, String year, String sort, int page) {
         String tmdbType = "movie".equalsIgnoreCase(type) ? "movie" : "tv";
-        String cacheKey = String.format("discover-%s-%s-%s-%s-%d", tmdbType, genreId != null ? genreId : "all", year != null ? year : "all", sort != null ? sort : "default", page);
+        List<Integer> genres = genreIds != null ? genreIds.stream().distinct().sorted().toList() : List.of();
+        List<String> kwNames = keywords != null ? keywords : List.of();
+
+        List<Integer> keywordIds = new ArrayList<>();
+        for (String kw : kwNames) {
+            Integer kwId = resolveKeywordId(kw);
+            if (kwId == null) return List.of(); // unknown keyword: nothing can match all filters
+            keywordIds.add(kwId);
+        }
+        String genreParam = genres.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+        String keywordParam = keywordIds.stream().distinct().sorted().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+
+        String cacheKey = String.format("discover-%s-%s-kw%s-%s-%s-%d", tmdbType, genreParam.isEmpty() ? "all" : genreParam,
+                keywordParam.isEmpty() ? "none" : keywordParam, year != null ? year : "all", sort != null ? sort : "default", page);
 
         Optional<List> cached = cacheService.get(cacheKey, List.class);
         if (cached.isPresent()) {
@@ -285,7 +306,7 @@ public class TmdbClient {
         if (apiKey == null || apiKey.isBlank()) return List.of();
 
         try {
-            boolean isTrending = genreId == null && (year == null || year.isBlank()) &&
+            boolean isTrending = genres.isEmpty() && keywordIds.isEmpty() && (year == null || year.isBlank()) &&
                     ("popular".equals(sort) || "trending".equals(sort) || sort == null || sort.isBlank());
 
             String requestUrl;
@@ -293,10 +314,11 @@ public class TmdbClient {
                 requestUrl = String.format("%s/trending/%s/week?api_key=%s&page=%d", BASE_URL, tmdbType, apiKey, page);
             } else {
                 StringBuilder sb = new StringBuilder(String.format("%s/discover/%s?api_key=%s&language=en-US&page=%d", BASE_URL, tmdbType, apiKey, page));
-                if (genreId != null) sb.append("&with_genres=").append(genreId);
+                if (!genreParam.isEmpty()) sb.append("&with_genres=").append(genreParam);
+                if (!keywordParam.isEmpty()) sb.append("&with_keywords=").append(keywordParam);
                 if (year != null && !year.isBlank()) {
                     sb.append("movie".equals(tmdbType) ? "&primary_release_year=" : "&first_air_date_year=").append(year);
-                } else if ("tv".equals(tmdbType) && ("popular".equals(sort) || "trending".equals(sort) || sort == null || sort.isBlank())) {
+                } else if ("tv".equals(tmdbType) && keywordIds.isEmpty() && ("popular".equals(sort) || "trending".equals(sort) || sort == null || sort.isBlank())) {
                     // For TV shows without a specified year, restrict to shows started in the past 3 years
                     // so 25-year-old syndicated daily reruns don't dominate genre discovery.
                     String threeYearsAgo = java.time.LocalDate.now().minusYears(3).toString();
@@ -339,6 +361,38 @@ public class TmdbClient {
         } catch (Exception e) {
             log.warn("TMDb discover request failed: {}", e.getMessage());
             return List.of();
+        }
+    }
+
+    /** Resolves a keyword name to its TMDb keyword id (exact, case-insensitive match), or null if none exists. */
+    private Integer resolveKeywordId(String name) {
+        if (name == null || name.isBlank()) return null;
+        String normalized = name.trim().toLowerCase(java.util.Locale.ROOT);
+        String cacheKey = "tmdb-keyword-id-" + normalized;
+        Optional<Integer> cached = cacheService.get(cacheKey, Integer.class);
+        if (cached.isPresent()) return cached.get() > 0 ? cached.get() : null;
+        if (apiKey == null || apiKey.isBlank()) return null;
+
+        try {
+            int found = -1;
+            for (int page = 1; page <= 3 && found < 0; page++) {
+                JsonNode data = restClient.get()
+                        .uri(BASE_URL + "/search/keyword?api_key={key}&query={q}&page={p}", apiKey, name.trim(), page)
+                        .retrieve().body(JsonNode.class);
+                if (data == null || !data.path("results").isArray()) break;
+                for (JsonNode k : data.get("results")) {
+                    if (k.path("name").asText("").trim().equalsIgnoreCase(normalized)) {
+                        found = k.path("id").asInt();
+                        break;
+                    }
+                }
+                if (page >= data.path("total_pages").asInt(1)) break;
+            }
+            cacheService.put(cacheKey, "tmdb", found, CACHE_TTL_SECONDS);
+            return found > 0 ? found : null;
+        } catch (Exception e) {
+            log.warn("TMDb keyword lookup failed for '{}': {}", name, e.getMessage());
+            return null;
         }
     }
 

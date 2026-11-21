@@ -205,61 +205,133 @@ public class RecommendationService {
         dto.setTopTwins(topTwins);
         dto.setTwinRecommendations(twinRecommendations);
 
-        // 3. Content-Based Recommendation: "Because You Loved [Title]"
-        ContentRecommendation contentRec = null;
-        UserRatingEntity topRated = myRatings.stream()
-                .filter(r -> r.getScore() != null && r.getMediaId() != null)
-                .max(Comparator.comparingInt(UserRatingEntity::getScore))
-                .orElse(null);
+        // 3. Content-based: "Because You Loved [Title]" for up to 3 of the user's top-rated TMDb titles
+        Set<String> shown = new HashSet<>(excludedMediaIds);
+        List<UserRatingEntity> topTmdb = myRatings.stream()
+                .filter(r -> r.getScore() != null && r.getScore() >= 75 && r.getMediaId() != null && r.getMediaId().startsWith("tmdb-"))
+                .sorted(Comparator.comparingInt(UserRatingEntity::getScore).reversed())
+                .toList();
 
-        if (topRated != null && topRated.getScore() >= 75) {
-            String mid = topRated.getMediaId();
-            if (mid.startsWith("tmdb-")) {
-                String[] parts = mid.split("-");
-                if (parts.length >= 3) {
-                    String tmdbType = parts[1];
-                    try {
-                        int tmdbId = Integer.parseInt(parts[2]);
-                        List<DiscoverItemDto> rawRecs = tmdbClient.getRecommendations(tmdbId, tmdbType);
+        List<ContentRecommendation> contentRecs = new ArrayList<>();
+        for (UserRatingEntity source : topTmdb) {
+            if (contentRecs.size() >= 3) break;
+            TmdbRef ref = TmdbRef.parse(source.getMediaId());
+            if (ref == null) continue;
+            List<DiscoverItemDto> items = takeUnseen(tmdbClient.getRecommendations(ref.id(), ref.type()), shown, 15);
+            if (items.isEmpty()) continue;
+            attachStats(items);
+            String sourceTitle = source.getMediaTitle() != null ? source.getMediaTitle() : "your favorite title";
+            contentRecs.add(new ContentRecommendation(source.getMediaId(), sourceTitle, source.getScore(), items));
+        }
+        dto.setContentRecommendations(contentRecs);
+        dto.setContentRecommendation(contentRecs.isEmpty() ? null : contentRecs.get(0));
 
-                        List<DiscoverItemDto> filtered = rawRecs.stream()
-                                .filter(item -> !excludedMediaIds.contains(item.getId()))
-                                .limit(15)
-                                .toList();
+        // 4. Genre-based: the genres that appear most in the user's well-rated TMDb titles
+        dto.setGenreRecommendations(buildGenreRecommendations(myRatings, shown));
+        return dto;
+    }
 
-                        // Attach DB stats & ranks to content recommendations
-                        List<String> contentIds = filtered.stream().map(DiscoverItemDto::getId).toList();
-                        if (!contentIds.isEmpty()) {
-                            Map<String, Integer> statsMap = mediaStatsRepository.findAllById(contentIds).stream()
-                                    .filter(s -> s.getCommunityAverage() != null && s.getTotalRatings() != null && s.getTotalRatings() > 0)
-                                    .collect(Collectors.toMap(MediaStatsEntity::getId, s -> s.getCommunityAverage().intValue(), (a, b) -> a));
-
-                            Map<String, Integer> rankMap = globalRankingRepository.findAllById(contentIds).stream()
-                                    .filter(r -> r.getRank() != null)
-                                    .collect(Collectors.toMap(GlobalRankingEntity::getMediaId, GlobalRankingEntity::getRank, (a, b) -> a));
-
-                            for (DiscoverItemDto item : filtered) {
-                                item.setCommunityScore(statsMap.get(item.getId()));
-                                item.setListRank(rankMap.get(item.getId()));
-                            }
-                        }
-
-                        if (!filtered.isEmpty()) {
-                            String sourceTitle = topRated.getMediaTitle() != null ? topRated.getMediaTitle() : "your favorite film";
-                            contentRec = new ContentRecommendation(
-                                    topRated.getMediaId(),
-                                    sourceTitle,
-                                    topRated.getScore(),
-                                    filtered
-                            );
-                        }
-                    } catch (NumberFormatException ignored) {}
-                }
+    private record TmdbRef(String type, int id) {
+        static TmdbRef parse(String mediaId) {
+            String[] parts = mediaId.split("-");
+            if (parts.length < 3 || !"tmdb".equals(parts[0])) return null;
+            try {
+                return new TmdbRef(parts[1], Integer.parseInt(parts[2]));
+            } catch (NumberFormatException e) {
+                return null;
             }
         }
+    }
 
-        dto.setContentRecommendation(contentRec);
-        return dto;
+    private record GenreInfo(int id, String slug) {}
+
+    /** TMDb genre name -> id and the matching Discover filter slug, per TMDb media type. */
+    private static final Map<String, GenreInfo> TMDB_MOVIE_GENRES = Map.ofEntries(
+            Map.entry("Action", new GenreInfo(28, "action")), Map.entry("Adventure", new GenreInfo(12, "adventure")),
+            Map.entry("Animation", new GenreInfo(16, "animation")), Map.entry("Comedy", new GenreInfo(35, "comedy")),
+            Map.entry("Crime", new GenreInfo(80, "crime")), Map.entry("Documentary", new GenreInfo(99, "documentary")),
+            Map.entry("Drama", new GenreInfo(18, "drama")), Map.entry("Family", new GenreInfo(10751, "family")),
+            Map.entry("Fantasy", new GenreInfo(14, "fantasy")), Map.entry("History", new GenreInfo(36, "history")),
+            Map.entry("Horror", new GenreInfo(27, "horror")), Map.entry("Music", new GenreInfo(10402, "music")),
+            Map.entry("Mystery", new GenreInfo(9648, "mystery")), Map.entry("Romance", new GenreInfo(10749, "romance")),
+            Map.entry("Science Fiction", new GenreInfo(878, "scifi")), Map.entry("TV Movie", new GenreInfo(10770, "tvmovie")),
+            Map.entry("Thriller", new GenreInfo(53, "thriller")), Map.entry("War", new GenreInfo(10752, "war")),
+            Map.entry("Western", new GenreInfo(37, "western")));
+    private static final Map<String, GenreInfo> TMDB_TV_GENRES = Map.ofEntries(
+            Map.entry("Action & Adventure", new GenreInfo(10759, "actionadventure")), Map.entry("Animation", new GenreInfo(16, "animation")),
+            Map.entry("Comedy", new GenreInfo(35, "comedy")), Map.entry("Crime", new GenreInfo(80, "crime")),
+            Map.entry("Documentary", new GenreInfo(99, "documentary")), Map.entry("Drama", new GenreInfo(18, "drama")),
+            Map.entry("Family", new GenreInfo(10751, "family")), Map.entry("Kids", new GenreInfo(10762, "kids")),
+            Map.entry("Mystery", new GenreInfo(9648, "mystery")), Map.entry("Reality", new GenreInfo(10764, "reality")),
+            Map.entry("Sci-Fi & Fantasy", new GenreInfo(10765, "scififantasy")), Map.entry("Soap", new GenreInfo(10766, "soap")),
+            Map.entry("War & Politics", new GenreInfo(10768, "warpolitics")), Map.entry("Western", new GenreInfo(37, "western")));
+
+    private List<GenreRecommendation> buildGenreRecommendations(List<UserRatingEntity> myRatings, Set<String> shown) {
+        record GenreKey(String tmdbType, String name) {}
+        Map<GenreKey, Double> weights = new HashMap<>();
+
+        myRatings.stream()
+                .filter(r -> r.getScore() != null && r.getScore() >= 60 && r.getMediaId() != null && r.getMediaId().startsWith("tmdb-"))
+                .sorted(Comparator.comparingInt(UserRatingEntity::getScore).reversed())
+                .limit(25) // details are cached for 7 days, so this is cheap after the first visit
+                .forEach(r -> {
+                    TmdbRef ref = TmdbRef.parse(r.getMediaId());
+                    if (ref == null) return;
+                    try {
+                        tmdbClient.getDetails(ref.id(), ref.type()).ifPresent(details -> {
+                            for (String g : details.getGenres()) {
+                                weights.merge(new GenreKey(ref.type(), g), r.getScore() - 50.0, Double::sum);
+                            }
+                        });
+                    } catch (Exception e) {
+                        log.warn("Genre lookup failed for {}: {}", r.getMediaId(), e.getMessage());
+                    }
+                });
+
+        List<GenreKey> ranked = weights.entrySet().stream()
+                .sorted(Map.Entry.<GenreKey, Double>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .toList();
+
+        List<GenreRecommendation> result = new ArrayList<>();
+        for (GenreKey key : ranked) {
+            if (result.size() >= 3) break;
+            boolean isMovie = "movie".equals(key.tmdbType());
+            GenreInfo genre = (isMovie ? TMDB_MOVIE_GENRES : TMDB_TV_GENRES).get(key.name());
+            if (genre == null) continue;
+            List<DiscoverItemDto> pool = new ArrayList<>(tmdbClient.discover(key.tmdbType(), List.of(genre.id()), List.of(), null, "all_time", 1));
+            pool.addAll(tmdbClient.discover(key.tmdbType(), List.of(genre.id()), List.of(), null, "all_time", 2));
+            List<DiscoverItemDto> items = takeUnseen(pool, shown, 15);
+            if (items.isEmpty()) continue;
+            attachStats(items);
+            result.add(new GenreRecommendation(key.name(), genre.slug(), isMovie ? "movie" : "show", items));
+        }
+        return result;
+    }
+
+    /** Picks up to {@code limit} items whose ids are not in {@code shown}, and marks them as shown. */
+    private static List<DiscoverItemDto> takeUnseen(List<DiscoverItemDto> items, Set<String> shown, int limit) {
+        List<DiscoverItemDto> out = new ArrayList<>();
+        for (DiscoverItemDto item : items) {
+            if (out.size() >= limit) break;
+            if (item.getId() != null && shown.add(item.getId())) out.add(item);
+        }
+        return out;
+    }
+
+    private void attachStats(List<DiscoverItemDto> items) {
+        List<String> ids = items.stream().map(DiscoverItemDto::getId).toList();
+        if (ids.isEmpty()) return;
+        Map<String, Integer> statsMap = mediaStatsRepository.findAllById(ids).stream()
+                .filter(s -> s.getCommunityAverage() != null && s.getTotalRatings() != null && s.getTotalRatings() > 0)
+                .collect(Collectors.toMap(MediaStatsEntity::getId, s -> s.getCommunityAverage().intValue(), (a, b) -> a));
+        Map<String, Integer> rankMap = globalRankingRepository.findAllById(ids).stream()
+                .filter(r -> r.getRank() != null)
+                .collect(Collectors.toMap(GlobalRankingEntity::getMediaId, GlobalRankingEntity::getRank, (a, b) -> a));
+        for (DiscoverItemDto item : items) {
+            item.setCommunityScore(statsMap.get(item.getId()));
+            item.setListRank(rankMap.get(item.getId()));
+        }
     }
 
     private String inferTypeFromMediaId(String mediaId) {

@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import CustomListsManager from "@/components/CustomListsManager";
 import MediaCardProfileHorizontal from "@/components/MediaCardProfileHorizontal";
 import FriendsManager from "@/components/FriendsManager";
 import { BADGE_DICTIONARY } from "@/components/ProfileHeader";
+import { coverSrc } from "@/lib/images";
 
 const getScoreColor = (score: number | null | undefined) => {
   if (score === null || score === undefined) return "bg-gray-900/80 text-gray-500 border-gray-700";
@@ -15,6 +17,10 @@ const getScoreColor = (score: number | null | undefined) => {
   if (score >= 25) return "bg-gray-800 text-gray-400 border-gray-600";
   return "bg-gray-900/80 text-gray-500 border-gray-700"; 
 };
+
+export const PROFILE_TABS = ['ratings', 'reviews', 'top100', 'stats', 'achievements', 'friends'] as const;
+export type ProfileTab = typeof PROFILE_TABS[number];
+const isProfileTab = (v: string | null): v is ProfileTab => !!v && (PROFILE_TABS as readonly string[]).includes(v);
 
 export interface ProfileItem {
   mediaId: string;
@@ -45,7 +51,10 @@ export default function ProfileTabs({
   userBadges?: UserBadge[],
   statsCache?: any
 }) {
-  const [activeTab, setActiveTab] = useState<'ratings' | 'reviews' | 'top100' | 'stats' | 'achievements' | 'friends'>('ratings');
+  // The active tab is mirrored in ?tab= so other places (e.g. the Toolkit drawer) can link straight to a tab.
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<ProfileTab>(isProfileTab(tabParam) ? tabParam : 'ratings');
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ProfileItem[]>(initialData);
   const [count, setCount] = useState<number>(initialCount);
@@ -75,9 +84,14 @@ export default function ProfileTabs({
     fetchData();
   }, [activeTab, page]);
 
-  const handleTabSwitch = (tab: any) => {
+  const handleTabSwitch = (tab: ProfileTab, syncUrl = true) => {
     if (tab !== activeTab) {
       setActiveTab(tab);
+      if (syncUrl) {
+        const url = new URL(window.location.href);
+        if (tab === 'ratings') url.searchParams.delete('tab'); else url.searchParams.set('tab', tab);
+        window.history.replaceState(null, '', url);
+      }
       setPage(1);
       if (tab === 'ratings') {
         setData(initialData);
@@ -88,6 +102,12 @@ export default function ProfileTabs({
       }
     }
   };
+
+  // Follow ?tab= when it changes from outside (a Toolkit link while already on the profile).
+  useEffect(() => {
+    handleTabSwitch(isProfileTab(tabParam) ? tabParam : 'ratings', false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabParam]);
 
   const getMediaUrl = (mediaId: string) => {
     if (!mediaId) return "#";
@@ -230,7 +250,7 @@ export default function ProfileTabs({
             <div key={item.mediaId} className="bg-gray-900 border border-gray-800 rounded-xl p-6 flex gap-6">
               {item.image && (
                 <Link href={getMediaUrl(item.mediaId)} className="w-24 shrink-0 block">
-                  <img src={item.image} alt={item.title} className="w-full rounded shadow-lg" />
+                  <img src={coverSrc(item.image)} alt={item.title} className="w-full rounded shadow-lg" />
                 </Link>
               )}
               <div className="flex-1">

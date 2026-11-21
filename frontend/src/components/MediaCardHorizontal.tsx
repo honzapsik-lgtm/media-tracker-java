@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MediaItem } from "@/types";
 import MediaActionMenu from "./MediaActionMenu";
+import { coverSrc } from "@/lib/images";
 
 const getScoreColor = (score: number | null | undefined) => {
   if (score === null || score === undefined) return "text-gray-500";
@@ -31,7 +32,7 @@ export default function MediaCardHorizontal({ item, rankPosition, showTotalRatin
       {/* Thumbnail */}
       <div className="shrink-0">
         {item.image ? (
-          <img src={item.image} className="w-12 h-16 object-cover rounded-md shadow-md" alt={item.title || "Cover"} />
+          <img src={coverSrc(item.image)} className="w-12 h-16 object-cover rounded-md shadow-md" alt={item.title || "Cover"} />
         ) : (
           <div className="w-12 h-16 bg-gray-950 border border-gray-800 rounded-md flex items-center justify-center text-[9px] font-bold text-gray-600 text-center">NO IMG</div>
         )}

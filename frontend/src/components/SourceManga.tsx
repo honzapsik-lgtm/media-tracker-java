@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { coverSrc } from "@/lib/images";
 
 interface RelatedMangaData {
   id: string | number;
@@ -86,7 +87,7 @@ export default function SourceManga({
           className="bg-gray-900 p-4 rounded-xl border border-gray-800 hover:border-blue-500 hover:bg-gray-800/80 transition-colors flex items-center gap-4 group"
         >
           {manga.image ? (
-            <img src={manga.image} alt={manga.title} className="w-14 h-20 object-cover rounded-lg shadow-md shrink-0" />
+            <img src={coverSrc(manga.image)} alt={manga.title} className="w-14 h-20 object-cover rounded-lg shadow-md shrink-0" />
           ) : (
             <div className="w-14 h-20 bg-gray-800 rounded-lg flex items-center justify-center text-xs text-gray-500 shrink-0">No Img</div>
           )}

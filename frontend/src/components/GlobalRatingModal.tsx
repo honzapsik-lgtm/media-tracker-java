@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import RatingSlider from "@/components/RatingSlider";
 import TextReviewEditor from "@/components/TextReviewEditor";
 import { MediaItem } from "@/types";
+import { coverSrc } from "@/lib/images";
 
 interface GlobalRatingModalProps {
   item: MediaItem;
@@ -41,7 +42,7 @@ export default function GlobalRatingModal({ item, onClose }: GlobalRatingModalPr
         
         <div className="flex items-center gap-4 mb-6">
           {item.image && (
-            <img src={item.image} alt={item.title} className="w-16 h-24 object-cover rounded shadow-lg" />
+            <img src={coverSrc(item.image)} alt={item.title} className="w-16 h-24 object-cover rounded shadow-lg" />
           )}
           <div>
             <h2 className="text-3xl font-black text-white">{item.title}</h2>

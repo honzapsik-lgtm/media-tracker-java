@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { coverSrc } from "@/lib/images";
 
 export interface Credit {
   id: string | number;
@@ -180,7 +181,7 @@ export function StaffGrid({ primaryStaff, secondaryStaff }: StaffGridProps) {
               {displayCredits.map(credit => (
                 <Link key={credit.id} href={credit.isCompany ? `/company/${credit.id}` : `/person/${credit.id}`} className="flex items-center gap-2 group">
                   {credit.image ? (
-                    <img src={credit.image} alt={credit.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                    <img src={coverSrc(credit.image)} alt={credit.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
                   ) : (
                     <div className="w-6 h-6 rounded-full bg-gray-800 flex items-center justify-center text-[10px] font-bold text-gray-500 shrink-0">
                       {credit.name[0]}
@@ -260,7 +261,7 @@ export function StaffGrid({ primaryStaff, secondaryStaff }: StaffGridProps) {
                             className="flex items-center gap-3 group"
                           >
                             {credit.image ? (
-                              <img src={credit.image} alt={credit.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                              <img src={coverSrc(credit.image)} alt={credit.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
                             ) : (
                               <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
                                 {credit.name[0]}

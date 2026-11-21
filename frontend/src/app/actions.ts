@@ -9,6 +9,8 @@ export interface DiscoverMediaItem {
   type: string;
   globalScore: number;
   releaseDate?: string | null;
+  communityScore?: number | null;
+  listRank?: number | null;
 }
 
 export async function getSeasonEpisodes(tvId: string, seasonNumber: number) {
@@ -25,10 +27,12 @@ export async function discoverMedia(
   type: string,
   genre: string,
   year: string,
-  sort: string
+  sort: string,
+  keywords: string[] = [],
+  page = 1
 ): Promise<DiscoverMediaItem[]> {
   try {
-    const items = await api.discoverMedia(type, genre, year, sort);
+    const items = await api.discoverMedia(type, genre, year, sort, page, keywords);
     return (items || []).map((item: any) => ({
       id: item.id || "",
       title: item.title || "Untitled",
@@ -36,6 +40,8 @@ export async function discoverMedia(
       type: item.type || type,
       globalScore: typeof item.globalScore === "number" ? item.globalScore : 0,
       releaseDate: item.releaseDate || null,
+      communityScore: typeof item.communityScore === "number" ? item.communityScore : null,
+      listRank: typeof item.listRank === "number" ? item.listRank : null,
     }));
   } catch (error) {
     console.error("[actions.discoverMedia] Failed to fetch discover media from Spring Boot:", error);
