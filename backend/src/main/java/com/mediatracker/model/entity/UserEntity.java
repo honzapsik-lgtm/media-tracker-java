@@ -1,5 +1,6 @@
 package com.mediatracker.model.entity;
 
+import com.mediatracker.model.enums.RatingStyle;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.time.LocalDateTime;
@@ -47,6 +48,10 @@ public class UserEntity {
     @Column(name = "username", unique = true)
     private String username;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rating_style", nullable = false, length = 16)
+    private RatingStyle ratingStyle = RatingStyle.PERCENT;
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
     public String getName() { return name; }
@@ -71,4 +76,6 @@ public class UserEntity {
     public void setRole(String role) { this.role = role; }
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
+    public RatingStyle getRatingStyle() { return ratingStyle; }
+    public void setRatingStyle(RatingStyle ratingStyle) { this.ratingStyle = ratingStyle; }
 }

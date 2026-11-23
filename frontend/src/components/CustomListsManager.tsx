@@ -334,6 +334,7 @@ export default function CustomListsManager() {
                 key={item.mediaId}
                 item={item}
                 viewContext="lists"
+                ownRating
                 draggable={true}
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={handleDragOver}

@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import UsernamePromptModal from "@/components/UsernamePromptModal";
+import { getRatingStyle } from "@/lib/preferences";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,15 +21,16 @@ export const metadata: Metadata = {
   description: "Track and rate movies, TV shows, anime, manga and video games in one place.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const ratingStyle = await getRatingStyle();
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-950 text-white min-h-screen`}>
-        <Providers>
+        <Providers ratingStyle={ratingStyle}>
           <Navbar />
           <UsernamePromptModal />
           <div className="pt-16">{children}</div>

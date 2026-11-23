@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CRITERIA_CONFIG } from "@/lib/constants";
 import RankListSelectModal from "@/components/RankListSelectModal";
+import { StarPicker } from "@/components/Score";
+import { useRatingStyle } from "@/components/RatingStyleProvider";
+import { scoreToStars, snapScore, starCount } from "@/lib/rating-style";
 
 type RatingMediaType = "game" | "movie" | "show" | "season" | "episode" | "manga";
 
@@ -26,6 +29,8 @@ interface RatingSliderProps {
 
 export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImage, mediaReleaseDate, initialRating = 50, initialCriteria, onSaved }: RatingSliderProps) {
   const router = useRouter();
+  const { ratingStyle } = useRatingStyle();
+  const stars = starCount(ratingStyle);
   const [rating, setRating] = useState<number>(initialRating);
   const [hasRated, setHasRated] = useState<boolean>(false);
   // Sub-scores stay hidden until the user opens "Advanced rating"; only then are they saved.
@@ -113,8 +118,12 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
   const handleSave = async () => {
     setIsSaving(true); setMessage(null);
     try {
+      // Star styles only allow whole stars, so snap (older or default values may sit between stars).
+      const score = snapScore(rating, ratingStyle);
       // Expanded: save the sub-scores. Collapsed: send none, so the backend keeps any saved earlier.
-      const payloadCriteria = showAdvanced ? criteria : undefined;
+      const payloadCriteria = showAdvanced
+        ? Object.fromEntries(Object.entries(criteria).map(([k, v]) => [k, snapScore(v, ratingStyle)]))
+        : undefined;
       const isDeepReview = showAdvanced || hasSavedCriteria;
 
       const res = await fetch("/api/ratings", {
@@ -123,7 +132,7 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
         body: JSON.stringify({
           mediaId,
           mediaType,
-          score: rating,
+          score,
           isDeepReview,
           criteriaScores: payloadCriteria,
           mediaTitle,
@@ -139,7 +148,8 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
       setMessage({ type: "success", text: "Rating saved successfully!" });
       setHasRated(true);
       fetchData(); 
-      onSaved?.(rating);
+      onSaved?.(score);
+      setRating(score);
       router.refresh(); // Tells Next.js to instantly reload the server data on the main page
       if (!hasRated) {
         setShowListModal(true); // Open the Rank List prompt only for new ratings
@@ -172,9 +182,20 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
       <div className="space-y-2">
         <div className="flex justify-between items-end">
           <span className="text-sm font-bold text-gray-400">Master Score</span>
-          <span className={`text-3xl font-black ${getScoreColor(rating)}`}>{rating}%</span>
+          {stars === null ? (
+            <span className={`text-3xl font-black ${getScoreColor(rating)}`}>{rating}%</span>
+          ) : (
+            <span className="text-sm font-bold text-gray-400">
+              <span className="text-2xl font-black text-white">{scoreToStars(rating, stars)}</span>/{stars}
+              <span className={`ml-2 text-xs ${getScoreColor(snapScore(rating, ratingStyle))}`}>{snapScore(rating, ratingStyle)}%</span>
+            </span>
+          )}
         </div>
-        <input type="range" min="0" max="100" value={rating} onChange={(e) => setRating(Number(e.target.value))} className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+        {stars === null ? (
+          <input type="range" min="0" max="100" value={rating} onChange={(e) => setRating(Number(e.target.value))} className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+        ) : (
+          <StarPicker value={rating} onChange={setRating} stars={stars} sizeClass={stars === 10 ? "w-[18px] h-[18px]" : "w-9 h-9"} label="Master score" />
+        )}
       </div>
 
       {showAdvanced && (
@@ -183,9 +204,17 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
           <div key={item.key} className="space-y-1.5">
             <div className="flex justify-between text-xs font-bold">
               <span className="text-gray-400">{item.label}</span>
-              <span className={getScoreColor(criteria[item.key] || 50)}>{criteria[item.key] || 50}%</span>
+              {stars === null ? (
+                <span className={getScoreColor(criteria[item.key] ?? 50)}>{criteria[item.key] ?? 50}%</span>
+              ) : (
+                <span className="text-gray-400">{scoreToStars(criteria[item.key] ?? 50, stars)}/{stars}</span>
+              )}
             </div>
-            <input type="range" min="0" max="100" value={criteria[item.key] || 50} onChange={(e) => updateCriterion(item.key, Number(e.target.value))} className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+            {stars === null ? (
+              <input type="range" min="0" max="100" value={criteria[item.key] ?? 50} onChange={(e) => updateCriterion(item.key, Number(e.target.value))} className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+            ) : (
+              <StarPicker value={criteria[item.key] ?? 50} onChange={(v) => updateCriterion(item.key, v)} stars={stars} sizeClass={stars === 10 ? "w-3.5 h-3.5" : "w-5 h-5"} label={item.label} />
+            )}
           </div>
         ))}
       </div>

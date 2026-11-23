@@ -1,3 +1,4 @@
+import { OwnScore } from "@/components/Score";
 import Link from "next/link";
 import { useState } from "react";
 import RankListSelectModal from "@/components/RankListSelectModal";
@@ -35,10 +36,12 @@ interface MediaCardProfileHorizontalProps {
   onDrop?: (e: React.DragEvent) => void;
   visualRank?: number; // the visual rank on the page
   viewContext?: "ratings" | "lists";
+  /** The score is the signed-in user's own rating: show it in their rating style. */
+  ownRating?: boolean;
 }
 
-export default function MediaCardProfileHorizontal({ 
-  item, draggable, onDragStart, onDragOver, onDrop, visualRank, viewContext 
+export default function MediaCardProfileHorizontal({
+  item, draggable, onDragStart, onDragOver, onDrop, visualRank, viewContext, ownRating = false
 }: MediaCardProfileHorizontalProps) {
   
   const [showListModal, setShowListModal] = useState(false);
@@ -128,18 +131,22 @@ export default function MediaCardProfileHorizontal({
             {Object.entries(item.criteriaScores).map(([key, val]: [string, any]) => (
               <div key={key} className="text-center">
                 <p className="text-[8px] text-gray-500 uppercase font-bold tracking-wider mb-0.5 max-w-[60px] truncate" title={key}>{key}</p>
-                <p className={`font-black text-sm ${getScoreColor(val)}`}>{val}%</p>
+                <p className={`font-black text-sm ${getScoreColor(val)}`}>{ownRating ? <OwnScore value={val} compact /> : `${val}%`}</p>
               </div>
             ))}
           </div>
         )}
 
         {/* Right Stats Block: Always My Score */}
-        <div className="text-right w-16">
+        <div className="text-right min-w-16">
           <p className="text-[9px] text-blue-500 uppercase font-bold tracking-widest mb-1">My Score</p>
-          <p className={`font-black text-base ${getScoreColor(score)}`}>
-            {score !== null && score !== undefined ? `${score}%` : "-"}
-          </p>
+          {ownRating ? (
+            <OwnScore value={score} className={`font-black text-base ${getScoreColor(score)}`} />
+          ) : (
+            <p className={`font-black text-base ${getScoreColor(score)}`}>
+              {score !== null && score !== undefined ? `${score}%` : "-"}
+            </p>
+          )}
         </div>
       </div>
 

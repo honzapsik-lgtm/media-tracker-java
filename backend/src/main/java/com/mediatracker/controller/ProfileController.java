@@ -3,6 +3,7 @@ package com.mediatracker.controller;
 import com.mediatracker.model.entity.UserEntity;
 import com.mediatracker.model.entity.UserPrivacySettingsEntity;
 import com.mediatracker.model.entity.UserRatingEntity;
+import com.mediatracker.model.enums.RatingStyle;
 import com.mediatracker.model.enums.VisibilityLevel;
 import com.mediatracker.security.SecurityUtils;
 import com.mediatracker.service.ProfileService;
@@ -96,6 +97,27 @@ public class ProfileController {
                 currentUserId, body.profileVisibility(), body.ratingsVisibility(), body.watchlistVisibility(), body.activityVisibility()
         );
         return ResponseEntity.ok(updated);
+    }
+
+    @GetMapping("/preferences")
+    @Operation(summary = "Get current user's display preferences")
+    public ResponseEntity<?> getPreferences() {
+        UUID currentUserId = SecurityUtils.requireCurrentUserId();
+        return ResponseEntity.ok(Map.of("ratingStyle", profileService.getRatingStyle(currentUserId)));
+    }
+
+    public record PreferencesUpdateRequest(RatingStyle ratingStyle) {}
+
+    @PatchMapping("/preferences")
+    @Operation(summary = "Update current user's display preferences")
+    public ResponseEntity<?> updatePreferences(@RequestBody PreferencesUpdateRequest body) {
+        UUID currentUserId = SecurityUtils.requireCurrentUserId();
+        try {
+            RatingStyle style = profileService.updateRatingStyle(currentUserId, body.ratingStyle());
+            return ResponseEntity.ok(Map.of("ratingStyle", style));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/ratings")

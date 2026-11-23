@@ -1,6 +1,7 @@
 package com.mediatracker.service;
 
 import com.mediatracker.model.entity.*;
+import com.mediatracker.model.enums.RatingStyle;
 import com.mediatracker.model.enums.VisibilityLevel;
 import com.mediatracker.repository.*;
 import org.springframework.stereotype.Service;
@@ -114,6 +115,21 @@ public class ProfileService {
         if (showcaseBadges != null) user.setShowcaseBadges(showcaseBadges.toArray(new String[0]));
 
         return userRepository.save(user);
+    }
+
+    public RatingStyle getRatingStyle(UUID currentUserId) {
+        return userRepository.findById(currentUserId)
+                .map(UserEntity::getRatingStyle)
+                .orElse(RatingStyle.PERCENT);
+    }
+
+    @Transactional
+    public RatingStyle updateRatingStyle(UUID currentUserId, RatingStyle ratingStyle) {
+        if (ratingStyle == null) throw new IllegalArgumentException("ratingStyle is required");
+        UserEntity user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        user.setRatingStyle(ratingStyle);
+        return userRepository.save(user).getRatingStyle();
     }
 
     public UserPrivacySettingsEntity getPrivacySettings(UUID currentUserId) {

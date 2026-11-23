@@ -234,7 +234,7 @@ export default function ProfileTabs({
         <div className={`transition-opacity duration-300 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
           <div className="space-y-2">
             {data.map((item) => (
-              <MediaCardProfileHorizontal key={item.mediaId} item={item} viewContext="ratings" />
+              <MediaCardProfileHorizontal key={item.mediaId} item={item} viewContext="ratings" ownRating />
             ))}
           </div>
           {renderPagination()}
