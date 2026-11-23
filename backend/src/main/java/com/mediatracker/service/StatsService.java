@@ -24,13 +24,19 @@ public class StatsService {
     private final UserStatsCacheRepository userStatsCacheRepository;
     private final UserBadgeRepository userBadgeRepository;
     private final ObjectMapper objectMapper;
+    private final FriendshipRepository friendshipRepository;
+    private final UserListRepository userListRepository;
 
     public StatsService(UserRatingRepository userRatingRepository,
                         MediaStatsRepository mediaStatsRepository,
                         UserWatchlistRepository userWatchlistRepository,
                         UserStatsCacheRepository userStatsCacheRepository,
                         UserBadgeRepository userBadgeRepository,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        FriendshipRepository friendshipRepository,
+                        UserListRepository userListRepository) {
+        this.friendshipRepository = friendshipRepository;
+        this.userListRepository = userListRepository;
         this.userRatingRepository = userRatingRepository;
         this.mediaStatsRepository = mediaStatsRepository;
         this.userWatchlistRepository = userWatchlistRepository;
@@ -196,32 +202,180 @@ public class StatsService {
         userStatsCacheRepository.save(cacheEntity);
     }
 
+    /** Progress towards one badge: unlocked when {@code current >= target}. */
+    public record BadgeProgress(int current, int target) {
+        public boolean unlocked() { return current >= target; }
+    }
+
+    private static boolean isMovie(String id) { return id.startsWith("tmdb-movie-"); }
+    private static boolean isShow(String id) { return id.matches("^tmdb-tv-[0-9]+$"); }
+    private static boolean isSeason(String id) { return id.matches("^tmdb-tv-[0-9]+-s[0-9]+$"); }
+    private static boolean isGame(String id) { return id.startsWith("igdb-") || id.startsWith("rawg-"); }
+    private static boolean isManga(String id) {
+        return id.startsWith("manga-") || id.startsWith("mangadex-") || id.startsWith("anilist-manga-");
+    }
+
+    /**
+     * Progress for every badge. Keep the rules in sync with BADGE_DICTIONARY in the frontend
+     * (components/badges.ts) and with scripts/seed/generate_seed.py.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, BadgeProgress> badgeProgress(UUID userId) {
+        List<UserRatingEntity> ratings = userRatingRepository.findByUserId(userId).stream()
+                .filter(r -> r.getMediaId() != null && r.getScore() != null).toList();
+        int total = ratings.size();
+        int movies = (int) ratings.stream().filter(r -> isMovie(r.getMediaId())).count();
+        int shows = (int) ratings.stream().filter(r -> isShow(r.getMediaId())).count();
+        int seasons = (int) ratings.stream().filter(r -> isSeason(r.getMediaId())).count();
+        int games = (int) ratings.stream().filter(r -> isGame(r.getMediaId())).count();
+        int manga = (int) ratings.stream().filter(r -> isManga(r.getMediaId())).count();
+        int reviews = (int) ratings.stream().filter(r -> r.getReviewText() != null && !r.getReviewText().isBlank()).count();
+        int deep = (int) ratings.stream().filter(r -> Boolean.TRUE.equals(r.getIsDeepReview())).count();
+        boolean voidStare = ratings.stream().anyMatch(r -> r.getScore() <= 20);
+        boolean masterpiece = ratings.stream().anyMatch(r -> r.getScore() == 100);
+        double avg = ratings.stream().mapToInt(UserRatingEntity::getScore).average().orElse(0);
+        int allRounder = Math.min(Math.min(movies, shows), Math.min(games, manga));
+        int friends = friendshipRepository.findAcceptedFriendships(userId).size();
+        int lists = (int) userListRepository.countByUserId(userId);
+        int completed = userWatchlistRepository.findByUserIdAndStatus(userId, WatchlistStatus.COMPLETED).size();
+
+        Map<String, BadgeProgress> p = new LinkedHashMap<>();
+        p.put("ratings_10", new BadgeProgress(total, 10));
+        p.put("ratings_50", new BadgeProgress(total, 50));
+        p.put("ratings_100", new BadgeProgress(total, 100));
+        p.put("ratings_250", new BadgeProgress(total, 250));
+        p.put("ratings_500", new BadgeProgress(total, 500));
+        p.put("movies_25", new BadgeProgress(movies, 25));
+        p.put("shows_25", new BadgeProgress(shows, 25));
+        p.put("seasons_10", new BadgeProgress(seasons, 10));
+        p.put("games_10", new BadgeProgress(games, 10));
+        p.put("manga_10", new BadgeProgress(manga, 10));
+        p.put("all_rounder", new BadgeProgress(allRounder, 5));
+        p.put("reviews_10", new BadgeProgress(reviews, 10));
+        p.put("reviews_50", new BadgeProgress(reviews, 50));
+        p.put("deep_10", new BadgeProgress(deep, 10));
+        p.put("void_stare", new BadgeProgress(voidStare ? 1 : 0, 1));
+        p.put("masterpiece", new BadgeProgress(masterpiece ? 1 : 0, 1));
+        // Average-based badges need 25 ratings first; progress shows how many are still missing.
+        p.put("tough_crowd", new BadgeProgress(total >= 25 && avg <= 55 ? 25 : Math.min(total, 24), 25));
+        p.put("golden_heart", new BadgeProgress(total >= 25 && avg >= 85 ? 25 : Math.min(total, 24), 25));
+        p.put("social_10", new BadgeProgress(friends, 10));
+        p.put("curator", new BadgeProgress(lists, 1));
+        p.put("finisher", new BadgeProgress(completed, 25));
+        return p;
+    }
+
+    /**
+     * Profile statistics computed from all of a user's ratings and lists (the stats cache only has
+     * per-type totals): per-type counts and averages, reviews, monthly activity, release decades,
+     * time spent, rating streaks and the top-rated titles.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> profileInsights(UUID userId) {
+        List<UserRatingEntity> ratings = userRatingRepository.findByUserId(userId).stream()
+                .filter(r -> r.getMediaId() != null && r.getScore() != null).toList();
+
+        Map<String, List<Integer>> scoresByType = new LinkedHashMap<>();
+        for (String t : List.of("movie", "show", "season", "game", "manga")) scoresByType.put(t, new ArrayList<>());
+        for (UserRatingEntity r : ratings) {
+            String id = r.getMediaId();
+            String t = isMovie(id) ? "movie" : isShow(id) ? "show" : isSeason(id) ? "season" : isGame(id) ? "game" : isManga(id) ? "manga" : null;
+            if (t != null) scoresByType.get(t).add(r.getScore());
+        }
+        List<Map<String, Object>> byType = new ArrayList<>();
+        scoresByType.forEach((t, scores) -> byType.add(Map.of(
+                "type", t,
+                "count", scores.size(),
+                "average", scores.isEmpty() ? 0 : Math.round(scores.stream().mapToInt(Integer::intValue).average().orElse(0) * 10) / 10.0)));
+
+        // Ratings per month, last 12 months (oldest first)
+        java.time.YearMonth thisMonth = java.time.YearMonth.now(java.time.ZoneOffset.UTC);
+        Map<java.time.YearMonth, Integer> perMonth = new LinkedHashMap<>();
+        for (int i = 11; i >= 0; i--) perMonth.put(thisMonth.minusMonths(i), 0);
+        // Distinct rating days, for streaks
+        java.util.TreeSet<java.time.LocalDate> days = new java.util.TreeSet<>();
+        for (UserRatingEntity r : ratings) {
+            if (r.getCreatedAt() == null) continue;
+            var date = r.getCreatedAt().atZoneSameInstant(java.time.ZoneOffset.UTC).toLocalDate();
+            days.add(date);
+            perMonth.computeIfPresent(java.time.YearMonth.from(date), (k, v) -> v + 1);
+        }
+        List<Map<String, Object>> monthly = new ArrayList<>();
+        perMonth.forEach((m, c) -> monthly.add(Map.of("month", m.toString(), "count", c)));
+
+        int longest = 0, run = 0;
+        java.time.LocalDate prev = null;
+        for (java.time.LocalDate d : days) {
+            run = (prev != null && prev.plusDays(1).equals(d)) ? run + 1 : 1;
+            longest = Math.max(longest, run);
+            prev = d;
+        }
+        int current = 0;
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        java.time.LocalDate cursor = days.contains(today) ? today : today.minusDays(1);
+        while (days.contains(cursor)) { current++; cursor = cursor.minusDays(1); }
+
+        // Release decades of rated titles
+        Map<String, Integer> decades = new TreeMap<>();
+        for (UserRatingEntity r : ratings) {
+            String d = r.getMediaReleaseDate();
+            if (d == null || d.length() < 4 || !d.substring(0, 4).chars().allMatch(Character::isDigit)) continue;
+            int year = Integer.parseInt(d.substring(0, 4));
+            if (year < 1900) continue;
+            decades.merge((year / 10 * 10) + "s", 1, Integer::sum);
+        }
+        List<Map<String, Object>> decadeList = new ArrayList<>();
+        decades.forEach((k, v) -> decadeList.add(Map.of("decade", k, "count", v)));
+
+        // Time spent from list progress
+        List<UserWatchlistEntity> watchlist = userWatchlistRepository.findByUserId(userId);
+        int episodes = 0, chapters = 0, movieWatches = 0, completed = 0;
+        double hours = 0;
+        for (UserWatchlistEntity w : watchlist) {
+            episodes += w.getEpisodesWatched() != null ? w.getEpisodesWatched() : 0;
+            chapters += w.getChaptersRead() != null ? w.getChaptersRead() : 0;
+            hours += w.getHoursPlayed() != null ? w.getHoursPlayed() : 0;
+            movieWatches += w.getWatchCount() != null ? w.getWatchCount() : 0;
+            if (w.getStatus() == WatchlistStatus.COMPLETED) completed++;
+        }
+
+        List<Map<String, Object>> topRated = ratings.stream()
+                .sorted(Comparator.comparingInt(UserRatingEntity::getScore).reversed()
+                        .thenComparing(UserRatingEntity::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(5)
+                .map(r -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("mediaId", r.getMediaId());
+                    m.put("title", r.getMediaTitle());
+                    m.put("image", r.getMediaImage());
+                    m.put("score", r.getScore());
+                    return m;
+                }).toList();
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("totalRatings", ratings.size());
+        out.put("average", ratings.isEmpty() ? 0 : Math.round(ratings.stream().mapToInt(UserRatingEntity::getScore).average().orElse(0) * 10) / 10.0);
+        out.put("reviews", ratings.stream().filter(r -> r.getReviewText() != null && !r.getReviewText().isBlank()).count());
+        out.put("deepReviews", ratings.stream().filter(r -> Boolean.TRUE.equals(r.getIsDeepReview())).count());
+        out.put("perfectScores", ratings.stream().filter(r -> r.getScore() == 100).count());
+        out.put("byType", byType);
+        out.put("monthly", monthly);
+        out.put("decades", decadeList);
+        out.put("currentStreak", current);
+        out.put("longestStreak", longest);
+        out.put("episodesWatched", episodes);
+        out.put("chaptersRead", chapters);
+        out.put("hoursPlayed", Math.round(hours));
+        out.put("movieWatches", movieWatches);
+        out.put("completed", completed);
+        out.put("topRated", topRated);
+        return out;
+    }
+
     @Transactional
     public void awardBadges(UUID userId) {
-        List<UserRatingEntity> ratings = userRatingRepository.findByUserId(userId);
-        int totalRatingsCount = ratings.size();
-
-        long gameRatingsCount = ratings.stream()
-                .filter(r -> r.getMediaId().startsWith("rawg-") || r.getMediaId().startsWith("igdb-"))
-                .count();
-
-        long mangaRatingsCount = ratings.stream()
-                .filter(r -> r.getMediaId().startsWith("manga-") || r.getMediaId().startsWith("mangadex-") || r.getMediaId().startsWith("anilist-manga-"))
-                .count();
-
-        boolean hasVoidStare = ratings.stream().anyMatch(r -> r.getScore() <= 20);
-        boolean hasMasterpiece = ratings.stream().anyMatch(r -> r.getScore() == 100);
-
-        Set<String> badgeIds = new HashSet<>();
-        if (totalRatingsCount >= 10) badgeIds.add("ratings_10");
-        if (totalRatingsCount >= 50) badgeIds.add("ratings_50");
-        if (totalRatingsCount >= 100) badgeIds.add("ratings_100");
-        if (gameRatingsCount >= 10) badgeIds.add("games_10");
-        if (mangaRatingsCount >= 10) badgeIds.add("manga_10");
-        if (hasVoidStare) badgeIds.add("void_stare");
-        if (hasMasterpiece) badgeIds.add("masterpiece");
-
-        for (String bId : badgeIds) {
+        badgeProgress(userId).forEach((bId, progress) -> {
+            if (!progress.unlocked()) return;
             UserBadgeId id = new UserBadgeId(userId, bId);
             if (!userBadgeRepository.existsById(id)) {
                 UserBadgeEntity b = new UserBadgeEntity();
@@ -229,6 +383,6 @@ public class StatsService {
                 b.setBadgeId(bId);
                 userBadgeRepository.save(b);
             }
-        }
+        });
     }
 }

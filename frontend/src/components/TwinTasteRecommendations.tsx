@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Carousel from './Carousel';
 import MediaCardVertical from './MediaCardVertical';
 
+import { Score } from "@/components/Score";
 export interface TwinProfile {
   id: string;
   username: string;
@@ -113,12 +114,7 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
   if (!data.hasRatings || data.userRatingsCount < 1) {
     return (
       <div className="mb-12 rounded-2xl border border-blue-900/40 bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-gray-900/50 p-6 backdrop-blur-md">
-        <div className="flex items-center gap-2 mb-2">
-          <h2 className="text-lg font-black text-white tracking-wide">Twin Taste Match</h2>
-          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-            Awaiting Ratings
-          </span>
-        </div>
+        <h2 className="text-lg font-black text-white tracking-wide mb-2">Twin Taste Match</h2>
         <p className="text-sm text-gray-400 mb-3">
           Rate movies, TV shows, or games to discover your <strong className="text-gray-200">Taste Twins</strong>—other users whose ratings closely align with yours—and unlock their top recommendations!
         </p>
@@ -204,7 +200,7 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
               <div key={rec.id} className="flex-none w-40 sm:w-48 lg:w-56 snap-start flex flex-col">
                 <div className="mb-2 flex items-center justify-between text-[11px] px-1 text-purple-300">
                   <span className="truncate font-semibold">@{rec.twin.username}</span>
-                  <span className="font-bold text-emerald-400 shrink-0">★ {rec.twinScore}%</span>
+                  <Score value={rec.twinScore} percentPrefix="★ " className="font-bold text-emerald-400 shrink-0" />
                 </div>
                 <MediaCardVertical
                   item={{
@@ -245,7 +241,7 @@ export default function TwinTasteRecommendations({ data }: { data: TwinTasteData
               </Link>
             </h2>
             <span className="text-xs font-semibold text-blue-400 px-2 py-0.5 rounded bg-blue-950/60 border border-blue-800/50">
-              Rated {rec.sourceScore}%
+              Rated <Score value={rec.sourceScore} />
             </span>
           </div>
           {cardRow(rec.recommendations)}

@@ -3,6 +3,7 @@ import { MediaItem } from "@/types";
 import MediaActionMenu from "./MediaActionMenu";
 import { coverSrc } from "@/lib/images";
 
+import { Score } from "@/components/Score";
 const getScoreColor = (score: number | null | undefined) => {
   if (score === null || score === undefined) return "bg-gray-900/80 text-gray-500 border-gray-700";
   if (score >= 95) return "bg-yellow-900/80 text-yellow-400 border-yellow-500 shadow-[0_0_8px_rgba(250,204,21,0.4)]"; 
@@ -21,7 +22,7 @@ export default function MediaCardVertical({ item }: { item: MediaItem }) {
       <div className="bg-gray-900 rounded-xl shadow-lg h-full border border-gray-800 relative flex flex-col">
         {/* Top Left: Community Score Badge */}
         <div className={`absolute top-2 left-2 z-10 px-2 py-1 text-xs font-black rounded shadow-lg border backdrop-blur-md transition-colors ${getScoreColor(item.communityScore)}`}>
-          ★ {item.communityScore ? `${item.communityScore}%` : 'N/A'}
+          <Score value={item.communityScore || null} kind="average" fallback="N/A" percentPrefix="★ " />
         </div>
 
         {/* Top Right: List Rank Badge */}
@@ -31,12 +32,19 @@ export default function MediaCardVertical({ item }: { item: MediaItem }) {
           {item.listRank ? `#${item.listRank}` : '# -'}
         </div>
         
-        {/* Poster Image */}
-        {item.image ? (
-          <img src={coverSrc(item.image)} alt={item.title} className="w-full h-auto object-cover aspect-[2/3] rounded-t-xl group-hover:opacity-80 transition-opacity" />
-        ) : (
-          <div className="w-full aspect-[2/3] bg-gray-800 rounded-t-xl flex items-center justify-center text-gray-500 p-4 text-center">No Image</div>
-        )}
+        {/* Poster Image, with your own rating in its bottom-left corner when known */}
+        <div className="relative">
+          {item.image ? (
+            <img src={coverSrc(item.image)} alt={item.title} className="w-full h-auto object-cover aspect-[2/3] rounded-t-xl group-hover:opacity-80 transition-opacity" />
+          ) : (
+            <div className="w-full aspect-[2/3] bg-gray-800 rounded-t-xl flex items-center justify-center text-gray-500 p-4 text-center">No Image</div>
+          )}
+          {item.myScore !== null && item.myScore !== undefined && (
+            <div className="absolute bottom-2 left-2 px-2 py-1 text-[11px] font-black rounded shadow-lg border backdrop-blur-md bg-blue-950/85 text-blue-200 border-blue-500/60">
+              You: <Score value={item.myScore} />
+            </div>
+          )}
+        </div>
         
         {/* Title & Type */}
         <div className="p-4 flex flex-col flex-1 justify-between">

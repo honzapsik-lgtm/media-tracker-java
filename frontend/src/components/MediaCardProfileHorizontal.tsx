@@ -1,4 +1,4 @@
-import { OwnScore } from "@/components/Score";
+import { Score } from "@/components/Score";
 import Link from "next/link";
 import { useState } from "react";
 import RankListSelectModal from "@/components/RankListSelectModal";
@@ -131,7 +131,7 @@ export default function MediaCardProfileHorizontal({
             {Object.entries(item.criteriaScores).map(([key, val]: [string, any]) => (
               <div key={key} className="text-center">
                 <p className="text-[8px] text-gray-500 uppercase font-bold tracking-wider mb-0.5 max-w-[60px] truncate" title={key}>{key}</p>
-                <p className={`font-black text-sm ${getScoreColor(val)}`}>{ownRating ? <OwnScore value={val} compact /> : `${val}%`}</p>
+                <p className={`font-black text-sm ${getScoreColor(val)}`}><Score value={val} /></p>
               </div>
             ))}
           </div>
@@ -140,13 +140,9 @@ export default function MediaCardProfileHorizontal({
         {/* Right Stats Block: Always My Score */}
         <div className="text-right min-w-16">
           <p className="text-[9px] text-blue-500 uppercase font-bold tracking-widest mb-1">My Score</p>
-          {ownRating ? (
-            <OwnScore value={score} className={`font-black text-base ${getScoreColor(score)}`} />
-          ) : (
-            <p className={`font-black text-base ${getScoreColor(score)}`}>
-              {score !== null && score !== undefined ? `${score}%` : "-"}
-            </p>
-          )}
+          <p className={`font-black text-base ${getScoreColor(score)}`}>
+            <Score value={score} />
+          </p>
         </div>
       </div>
 

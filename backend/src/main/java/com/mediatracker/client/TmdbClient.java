@@ -498,6 +498,46 @@ public class TmdbClient {
         }
     }
 
+    /** Production companies and studios (e.g. "MAPPA", "A24"). Ids are company slugs: tmdb-<id>. */
+    public List<MediaItemDto> searchCompanies(String query) {
+        if (query == null || query.isBlank()) return List.of();
+        String normalizedQuery = query.trim().toLowerCase();
+        String cacheKey = "tmdb-search-company-" + normalizedQuery;
+
+        Optional<List> cached = cacheService.get(cacheKey, List.class);
+        if (cached.isPresent()) {
+            return objectMapper.convertValue(cached.get(), objectMapper.getTypeFactory().constructCollectionType(List.class, MediaItemDto.class));
+        }
+        if (apiKey == null || apiKey.isBlank()) return List.of();
+
+        try {
+            String uri = String.format("%s/search/company?api_key=%s&query=%s&page=1",
+                    BASE_URL, apiKey, java.net.URLEncoder.encode(normalizedQuery, java.nio.charset.StandardCharsets.UTF_8));
+            JsonNode data = restClient.get().uri(uri).retrieve().body(JsonNode.class);
+            if (data == null || !data.path("results").isArray()) return List.of();
+
+            List<MediaItemDto> results = new ArrayList<>();
+            for (JsonNode item : data.get("results")) {
+                String logo = item.path("logo_path").asText(null);
+                String country = item.path("origin_country").asText("");
+                MediaItemDto dto = new MediaItemDto();
+                dto.setId("tmdb-" + item.path("id").asInt());
+                dto.setTitle(item.path("name").asText("Unknown"));
+                dto.setType("company");
+                dto.setImage(logo != null && !logo.isBlank() ? "https://image.tmdb.org/t/p/w300" + logo : null);
+                dto.setDescription(country.isBlank() ? "Company" : "Company · " + country);
+                dto.setOrigin("TMDB");
+                results.add(dto);
+                if (results.size() >= 10) break;
+            }
+            cacheService.put(cacheKey, "tmdb", results, 24 * 3600);
+            return results;
+        } catch (Exception e) {
+            log.warn("TMDb company search error for query '{}': {}", query, e.getMessage());
+            return List.of();
+        }
+    }
+
     public List<MediaItemDto> searchPersons(String query) {
         if (query == null || query.isBlank()) return List.of();
         String normalizedQuery = query.trim().toLowerCase();

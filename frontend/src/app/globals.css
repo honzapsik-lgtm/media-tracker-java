@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* Scrollbars that blend into the dark UI instead of the bright default ones. */
+html {
+  color-scheme: dark;
+  scrollbar-color: #1f2937 #030712; /* thumb: gray-800, track: page background */
+}
+* {
+  scrollbar-width: thin;
+}
+/* Inner scroll areas sit on cards, so give them a transparent track. */
+body * {
+  scrollbar-color: #27272a transparent; /* zinc-800 */
+}
+
 .hide-scrollbar {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */

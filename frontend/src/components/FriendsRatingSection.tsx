@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { Users, Star, MessageSquare } from "lucide-react";
+import { Users, MessageSquare } from "lucide-react";
 
+import { Score } from "@/components/Score";
 interface FriendRating {
   id: string;
   score: number;
@@ -62,10 +63,6 @@ export default function FriendsRatingSection({ mediaId }: { mediaId: string }) {
     return null;
   }
 
-  const averageScore = Math.round(
-    ratings.reduce((acc, curr) => acc + curr.score, 0) / ratings.length
-  );
-
   return (
     <div className="bg-zinc-900/60 rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-4">
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
@@ -81,10 +78,6 @@ export default function FriendsRatingSection({ mediaId }: { mediaId: string }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700/60">
-          <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
-          <span className="text-xs font-bold text-zinc-200">{averageScore}% avg</span>
-        </div>
       </div>
 
       <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
@@ -135,7 +128,7 @@ export default function FriendsRatingSection({ mediaId }: { mediaId: string }) {
                     item.score
                   )}`}
                 >
-                  {item.score}%
+                  <Score value={item.score} />
                 </div>
               </div>
 

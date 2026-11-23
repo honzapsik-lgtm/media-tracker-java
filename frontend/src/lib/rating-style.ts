@@ -1,7 +1,7 @@
-// The rating style controls how a user *gives* ratings. Scores are always
+// The rating style controls how a user gives and reads ratings. Scores are always
 // stored as 0-100: with 5 stars each star is worth 20 (0, 20, ... 100), with
-// 10 stars each star is worth 10. Community scores, statistics and covers stay
-// in percent; only the user's own ratings on their profile are shown as stars.
+// 10 stars each star is worth 10. In a star style every score on the site is
+// shown in stars: single ratings as whole stars, averages with one decimal.
 
 export const RATING_STYLES = ["PERCENT", "STARS_5", "STARS_10"] as const;
 export type RatingStyle = (typeof RATING_STYLES)[number];
@@ -39,4 +39,19 @@ export function starsToScore(filled: number, stars: number): number {
 export function snapScore(score: number, style: RatingStyle): number {
   const stars = starCount(style);
   return stars === null ? score : starsToScore(scoreToStars(score, stars), stars);
+}
+
+/** "73%" / "4/5 ★" for a single rating (whole stars, rounded). */
+export function formatRating(score: number, style: RatingStyle): string {
+  const stars = starCount(style);
+  if (stars === null) return `${Math.round(score)}%`;
+  return `${scoreToStars(score, stars)}/${stars} ★`;
+}
+
+/** "73.4%" / "7.3/10 ★" for an average (community score, statistics): one decimal, not rounded to whole stars. */
+export function formatAverage(score: number, style: RatingStyle): string {
+  const stars = starCount(style);
+  const clamped = Math.min(100, Math.max(0, score));
+  if (stars === null) return `${Number.isInteger(clamped) ? clamped : clamped.toFixed(1)}%`;
+  return `${((clamped / 100) * stars).toFixed(1)}/${stars} ★`;
 }

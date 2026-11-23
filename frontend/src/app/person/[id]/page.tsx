@@ -7,6 +7,7 @@ import Carousel from "@/components/Carousel";
 import { UnifiedCredit } from "@/types/person";
 import PersonCredits from "@/components/PersonCredits";
 import BackToSearchButton from "@/components/BackToSearchButton";
+import { getMediaRankings } from "@/lib/media-api";
 
 export default async function PersonProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
@@ -52,13 +53,19 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
   const uniqueCredits = Array.from(new Map(combinedCredits.map(c => [c.mediaId || c.title, c])).values());
 
   const mediaIds = uniqueCredits.map(c => c.mediaId).filter(Boolean) as string[];
-  const statsMap: Record<string, number> = {};
-  const rankMap: Record<string, number> = {};
+  // Community scores, list ranks and the signed-in user's own ratings for every credit
+  const batch = mediaIds.length
+    ? await getMediaRankings(mediaIds).catch(() => ({ stats: {}, ranks: {}, mine: {} }))
+    : { stats: {}, ranks: {}, mine: {} };
+  const statsMap: Record<string, number> = batch.stats || {};
+  const rankMap: Record<string, number> = batch.ranks || {};
+  const myRatings: Record<string, number> = batch.mine || {};
 
   const creditsWithStats = uniqueCredits.map(credit => ({
     ...credit,
     communityScore: credit.mediaId ? statsMap[credit.mediaId] : null,
     listRank: credit.mediaId ? rankMap[credit.mediaId] : null,
+    myScore: credit.mediaId ? myRatings[credit.mediaId] ?? null : null,
   }));
 
   // If local database has community scores, prioritize them;
@@ -190,7 +197,8 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
                     image: credit.poster,
                     releaseDate: credit.releaseYear?.toString() || 'N/A',
                     communityScore: credit.communityScore || null,
-                    listRank: credit.listRank || null
+                    listRank: credit.listRank || null,
+                    myScore: credit.myScore,
                   }} />
                 </div>
               ))}
@@ -199,7 +207,7 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
         )}
 
         {/* Unified Credits Timeline */}
-        <PersonCredits initialCredits={profile.credits} personSlug={canonicalSlug} />
+        <PersonCredits initialCredits={profile.credits} personSlug={canonicalSlug} myRatings={myRatings} />
 
       </div>
     </main>

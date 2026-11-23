@@ -4,9 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { UnifiedCredit } from "@/types/person";
 
+import { Score } from "@/components/Score";
 interface PersonCreditsProps {
   initialCredits: { cast: UnifiedCredit[]; crew: UnifiedCredit[] };
   personSlug: string;
+  /** The signed-in user's own scores by media id. */
+  myRatings?: Record<string, number>;
 }
 
 type Category = "movies_shows" | "shorts" | "documentary" | "talk" | "all";
@@ -24,7 +27,7 @@ interface ConsolidatedCredit {
   category: string;
 }
 
-export default function PersonCredits({ initialCredits: credits }: PersonCreditsProps) {
+export default function PersonCredits({ initialCredits: credits, myRatings = {} }: PersonCreditsProps) {
   const getCategory = (c: UnifiedCredit): string => {
     if (c.category) return c.category;
     const role = (c.role || "").toLowerCase().trim();
@@ -235,9 +238,16 @@ export default function PersonCredits({ initialCredits: credits }: PersonCredits
             </div>
           </div>
 
-          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded bg-gray-950 text-gray-500 border border-gray-800 shrink-0 self-start sm:self-auto">
-            {c.mediaType}
-          </span>
+          <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+            {c.mediaId && myRatings[c.mediaId] !== undefined && (
+              <span className="text-[11px] font-black px-2 py-1 rounded bg-blue-950/70 text-blue-200 border border-blue-500/50" title="Your rating">
+                You: <Score value={myRatings[c.mediaId]} />
+              </span>
+            )}
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded bg-gray-950 text-gray-500 border border-gray-800">
+              {c.mediaType}
+            </span>
+          </div>
         </div>
       </>
     );

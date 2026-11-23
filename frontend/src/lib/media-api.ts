@@ -35,7 +35,8 @@ export function getEpisodeCredits(slug: string, season: number, episode: number)
 }
 
 export function getMediaRankings(ids: string[]) {
-  return apiFetch<{ stats: Record<string, number>; ranks: Record<string, number> }>("/media/batch-stats", {
+  // "mine" holds the signed-in user's own scores for these ids (empty for guests).
+  return apiFetch<{ stats: Record<string, number>; ranks: Record<string, number>; mine?: Record<string, number> }>("/media/batch-stats", {
     method: "POST", body: JSON.stringify({ ids }),
   });
 }

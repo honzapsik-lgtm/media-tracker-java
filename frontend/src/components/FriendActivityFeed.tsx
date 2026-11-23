@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { coverSrc } from "@/lib/images";
 
+import { Score } from "@/components/Score";
 interface ActivityUser {
   id: string;
   name: string | null;
@@ -120,7 +121,7 @@ export default function FriendActivityFeed() {
             <span>rated</span>
             {score !== undefined && (
               <span className={`px-2 py-0.5 rounded text-xs font-bold border ${getScoreBadgeClass(score)}`}>
-                {score}%
+                <Score value={score} />
               </span>
             )}
           </div>

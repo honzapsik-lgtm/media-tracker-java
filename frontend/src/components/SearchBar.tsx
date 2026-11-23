@@ -100,15 +100,18 @@ export default function SearchBar() {
 
       {/* Dropdown Menu */}
       {isOpen && query.trim() && (
-        <div className="absolute top-full mt-2 w-full max-w-sm bg-gray-900 border border-gray-700 rounded-xl shadow-2xl shadow-black/50 overflow-hidden divide-y divide-gray-800">
+        <div className="absolute top-full mt-2 left-0 w-[34rem] max-w-[calc(100vw-2rem)] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl shadow-black/50 overflow-hidden divide-y divide-gray-800">
           {isLoading && results.length === 0 ? (
             <div className="p-4 text-center text-sm text-gray-400">Searching...</div>
           ) : results.length > 0 ? (
             <div className="max-h-[70vh] overflow-y-auto scrollbar-none">
               {results.map((item) => {
                 const isPerson = item.type === "person";
+                const isCompany = item.type === "company";
                 const href = isPerson
                   ? `/person/${item.id}`
+                  : isCompany
+                  ? `/company/${item.id}`
                   : item.origin === "ANILIST" && !String(item.id).startsWith("anilist-")
                   ? `/media/anilist-manga-${item.id}`
                   : `/media/${item.id}`;
@@ -120,12 +123,12 @@ export default function SearchBar() {
                     onClick={handleResultClick}
                     className="flex items-center gap-3 p-3 hover:bg-gray-800 transition-colors group"
                   >
-                    <div className={`w-10 h-14 bg-gray-800 ${isPerson ? 'rounded-full w-11 h-11' : 'rounded'} overflow-hidden shrink-0 flex items-center justify-center`}>
+                    <div className={`w-10 h-14 bg-gray-800 ${isPerson ? 'rounded-full w-11 h-11' : isCompany ? 'rounded w-11 h-11 bg-gray-100/95 p-1' : 'rounded'} overflow-hidden shrink-0 flex items-center justify-center`}>
                       {item.image ? (
-                        <img src={coverSrc(item.image)} alt={item.title} className="w-full h-full object-cover" />
+                        <img src={coverSrc(item.image)} alt={item.title} className={`w-full h-full ${isCompany ? 'object-contain' : 'object-cover'}`} />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 text-center font-bold">
-                          {isPerson ? (item.title ? item.title.charAt(0) : "P") : "No Img"}
+                          {isPerson ? (item.title ? item.title.charAt(0) : "P") : isCompany ? (item.title ? item.title.charAt(0) : "C") : "No Img"}
                         </div>
                       )}
                     </div>
@@ -137,13 +140,17 @@ export default function SearchBar() {
                         <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
                           isPerson
                             ? "bg-amber-950 text-amber-300 border border-amber-800/60"
+                            : isCompany
+                            ? "bg-emerald-950 text-emerald-300 border border-emerald-800/60"
                             : "bg-gray-800 text-gray-400"
                         }`}>
-                          {isPerson ? "Person" : item.type}
+                          {isPerson ? "Person" : isCompany ? "Company" : item.type}
                         </span>
                         <span className="text-xs text-gray-500 truncate">
                           {isPerson
                             ? (item.description || item.releaseDate || "Person")
+                            : isCompany
+                            ? (item.description || "Company")
                             : (item.releaseDate ? item.releaseDate.split("-")[0] : "N/A")}
                         </span>
                       </div>

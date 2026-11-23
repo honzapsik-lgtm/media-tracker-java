@@ -4,6 +4,7 @@ import RatingSlider from "@/components/RatingSlider";
 import FriendsRatingSection from "@/components/FriendsRatingSection";
 import TextReviewEditor from "@/components/TextReviewEditor";
 import Link from "next/link";
+import KeywordChips from "@/components/KeywordChips";
 import { notFound, redirect } from "next/navigation";
 import ExpandableText from "@/components/ExpandableText";
 import WatchlistButton from "@/components/WatchlistButton";
@@ -25,6 +26,7 @@ import { getRatings } from "@/lib/api-client";
 
 import { coverSrc } from "@/lib/images";
 
+import { Score } from "@/components/Score";
 const getScoreColor = (score: number | null | undefined) => {
   if (score === null || score === undefined) return "text-gray-500";
   if (score >= 95) return "text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]"; 
@@ -316,18 +318,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
             {Array.isArray(mediaDetails.keywords) && mediaDetails.keywords.length > 0 && (
               <div className="mt-4 bg-gray-950/50 p-5 rounded-2xl border border-gray-800 shadow-xl">
                 <h3 className="text-sm font-black text-gray-500 uppercase tracking-widest mb-3">Keywords</h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {mediaDetails.keywords.slice(0, 30).map((kw: string) => (
-                    <Link
-                      key={kw}
-                      href={`/discover?type=${mediaTypeKey}&keyword=${encodeURIComponent(kw)}`}
-                      title={`Browse ${mediaTypeKey === 'show' ? 'shows' : mediaTypeKey + 's'} tagged "${kw}"`}
-                      className="bg-gray-900/80 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 text-gray-400 hover:text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
-                    >
-                      {kw}
-                    </Link>
-                  ))}
-                </div>
+                <KeywordChips keywords={mediaDetails.keywords.slice(0, 40)} mediaTypeKey={mediaTypeKey} />
               </div>
             )}
 
@@ -515,7 +506,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
               <div className="shrink-0">
                 <p className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Community Score</p>
                 <p className={`text-4xl font-extrabold ${getScoreColor(stats?.community_average)}`}>
-                  {stats?.community_average ? `${stats.community_average}%` : 'N/A'}
+                  <Score value={stats?.community_average || null} kind="average" fallback="N/A" />
                 </p>
                 <p className="text-xs text-gray-500 mt-1">{stats?.total_ratings || 0} ratings</p>
               </div>
@@ -541,7 +532,7 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
                         return (
                           <div key={item.key} className="flex justify-between items-center text-sm">
                             <span className="text-gray-400 font-medium">{item.label}</span>
-                            <span className={`font-black ${getScoreColor(score)}`}>{score}%</span>
+                            <span className={`font-black ${getScoreColor(score)}`}><Score value={score} kind="average" /></span>
                           </div>
                         );
                       })}
@@ -661,12 +652,12 @@ export default async function MediaDetailsPage({ params }: { params: Promise<{ i
               {reviews.map((review: any, index: number) => (
                 <div key={index} className="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col">
                   <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-3">
+                    <Link href={`/user/${encodeURIComponent(review.username || review.userId)}`} className="group flex items-center gap-3 min-w-0">
                   {review.avatar_url ? ( <img src={review.avatar_url} alt={review.username ?? "Reviewer"} className="w-10 h-10 rounded-full border border-gray-700 object-cover" /> ) : ( <div className="w-10 h-10 rounded-full bg-blue-900 border border-blue-500 flex items-center justify-center font-bold text-sm">{review.username?.charAt(0).toUpperCase() || '?'}</div> )}
-                      <div><p className="font-bold text-gray-200">{review.username}</p><p className="text-xs text-gray-500">{new Date(review.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>
-                    </div>
+                      <div><p className="font-bold text-gray-200 group-hover:text-blue-400 group-hover:underline transition-colors">{review.username}</p><p className="text-xs text-gray-500">{new Date(review.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>
+                    </Link>
                     <div className={`px-3 py-1 rounded-lg border font-black ${review.score >= 95 ? 'bg-yellow-900/50 border-yellow-500 text-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.3)]' : review.score >= 75 ? 'bg-green-900 border-green-500 text-green-400' : review.score >= 50 ? 'bg-blue-900 border-blue-500 text-blue-400' : review.score >= 25 ? 'bg-gray-800 border-gray-600 text-gray-400' : 'bg-gray-950 border-gray-800 text-gray-600'}`}>
-                      {review.score}%
+                      <Score value={review.score} />
                     </div>
                   </div>
                   <p className="text-gray-300 leading-relaxed whitespace-pre-wrap flex-1">&ldquo;{review.review_text}&rdquo;</p>

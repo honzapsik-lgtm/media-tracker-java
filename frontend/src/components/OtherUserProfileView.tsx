@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BADGE_DICTIONARY } from "@/components/ProfileHeader";
+import { BADGE_DICTIONARY, BadgeIcon } from "@/components/badges";
+import ProfileInsights, { type Insights } from "@/components/ProfileInsights";
 import MediaCardProfileHorizontal from "@/components/MediaCardProfileHorizontal";
 import FriendActionButton, { FriendshipRelation } from "@/components/FriendActionButton";
 import {
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import { coverSrc } from "@/lib/images";
 
+import { Score } from "@/components/Score";
 interface OtherUserProfileViewProps {
   user: {
     id: string;
@@ -36,6 +38,7 @@ interface OtherUserProfileViewProps {
   activities: any[];
   badges: any[];
   statsCache?: any;
+  insights?: Insights | null;
   canViewProfile: boolean;
   canViewRatings: boolean;
   canViewActivity: boolean;
@@ -49,6 +52,7 @@ export default function OtherUserProfileView({
   activities,
   badges,
   statsCache,
+  insights,
   canViewProfile,
   canViewRatings,
   canViewActivity,
@@ -137,7 +141,7 @@ export default function OtherUserProfileView({
                   title={`${badgeDef.title}: ${badgeDef.desc}`}
                   className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded-lg text-xs font-bold text-purple-300 flex items-center gap-1.5 shadow-sm"
                 >
-                  <Award className="w-3.5 h-3.5 text-purple-400" />
+                  <BadgeIcon id={badgeDef.id} className="w-3.5 h-3.5 text-purple-400" />
                   {badgeDef.title}
                 </div>
               );
@@ -231,7 +235,7 @@ export default function OtherUserProfileView({
               {!canViewRatings ? (
                 <div className="py-16 text-center text-zinc-500 flex flex-col items-center gap-3">
                   <EyeOff className="w-8 h-8 text-zinc-600" />
-                  <p className="text-sm">User has set ratings to private.</p>
+                  <p className="text-sm">This user's ratings are hidden from you.</p>
                 </div>
               ) : ratings.length === 0 ? (
                 <p className="text-zinc-500 text-center py-16">
@@ -252,7 +256,7 @@ export default function OtherUserProfileView({
               {!canViewActivity ? (
                 <div className="py-16 text-center text-zinc-500 flex flex-col items-center gap-3">
                   <EyeOff className="w-8 h-8 text-zinc-600" />
-                  <p className="text-sm">User has set activity to private.</p>
+                  <p className="text-sm">This user's activity is hidden from you.</p>
                 </div>
               ) : activities.length === 0 ? (
                 <p className="text-zinc-500 text-center py-16">
@@ -286,12 +290,8 @@ export default function OtherUserProfileView({
                         >
                           {act.media_title || "Unknown Media"}
                         </Link>
-                        <p className="text-xs text-zinc-400 mt-1 capitalize">
-                          {act.type.replace(/_/g, " ").toLowerCase()}{" "}
-                          {act.data?.score !== undefined && `(${act.data.score}%)`}
-                          {act.data?.episode && `Ep ${act.data.episode}`}
-                          {act.data?.chapter && `Ch ${act.data.chapter}`}
-                          {act.data?.status && `to ${act.data.status}`}
+                        <p className="text-xs text-zinc-400 mt-1">
+                          <ActivityLine act={act} />
                         </p>
                       </div>
                     </div>
@@ -315,8 +315,8 @@ export default function OtherUserProfileView({
                     }`}
                   >
                     <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center font-bold text-purple-400">
-                        {badge.icon}
+                      <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-300">
+                        <BadgeIcon id={badge.id} className="w-5 h-5" />
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-white">
@@ -338,53 +338,43 @@ export default function OtherUserProfileView({
             </div>
           )}
 
-          {activeTab === "stats" && (
-            <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6">
-              <h3 className="text-base font-bold text-white mb-4">
-                Media Tracking Breakdown
-              </h3>
-              <p className="text-xs text-zinc-400 mb-6">
-                Total media scored and tracked across categories.
-              </p>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {["MOVIE", "SHOW", "GAME", "MANGA"].map((cat) => {
-                  const count = ratings.filter((r) => {
-                    let t = r.type;
-                    if (t === "SEASON" || t === "EPISODE") t = "SHOW";
-                    return t === cat;
-                  }).length;
-                  const Icon =
-                    cat === "MOVIE"
-                      ? Film
-                      : cat === "SHOW"
-                      ? Tv
-                      : cat === "GAME"
-                      ? Gamepad2
-                      : BookOpen;
-
-                  return (
-                    <div
-                      key={cat}
-                      className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-800 flex items-center gap-3"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-zinc-700/50 flex items-center justify-center text-zinc-300">
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-zinc-400 capitalize">
-                          {cat.toLowerCase()}s
-                        </p>
-                        <p className="text-lg font-bold text-white">{count}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {activeTab === "stats" && <ProfileInsights insights={insights} />}
         </div>
       )}
     </div>
   );
+}
+
+const STATUS_WORDS: Record<string, Record<string, string>> = {
+  PLANNING: { GAME: "Added to backlog", MANGA: "Plans to read", default: "Plans to watch" },
+  IN_PROGRESS: { GAME: "Started playing", MANGA: "Started reading", default: "Started watching" },
+  COMPLETED: { GAME: "Finished playing", MANGA: "Finished reading", default: "Finished watching" },
+  ON_HOLD: { default: "Put on hold" },
+  DROPPED: { default: "Dropped" },
+};
+
+/** One readable line per activity, e.g. "Rated 87%", "Watched episode 12", "Played 4 hours". */
+function ActivityLine({ act }: { act: any }) {
+  const d = act.data || {};
+  const mediaType = String(act.media_type || "").toUpperCase();
+  switch (act.type) {
+    case "RATED_MEDIA":
+      return <>Rated <Score value={d.score} className="font-bold text-zinc-200" /></>;
+    case "EPISODES_WATCHED":
+      return <>Watched episode {d.episode}</>;
+    case "CHAPTERS_READ":
+      return <>Read chapter {d.chapter}</>;
+    case "VOLUMES_READ":
+      return <>Read volume {d.volume}</>;
+    case "HOURS_PLAYED":
+      return <>Played for {d.hours} hours</>;
+    case "WATCHLIST_STATUS": {
+      const words = STATUS_WORDS[d.status] || {};
+      return <>{words[mediaType] || words.default || "Updated their list"}</>;
+    }
+    case "FAVORITED":
+      return <>Added to favourites</>;
+    default:
+      return <>{String(act.type || "").replace(/_/g, " ").toLowerCase()}</>;
+  }
 }

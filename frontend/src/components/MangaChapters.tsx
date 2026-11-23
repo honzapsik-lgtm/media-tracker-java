@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import RatingSlider from "@/components/RatingSlider";
 
+import { Score } from "@/components/Score";
 interface Chapter {
   id: string;
   volume: string | null;
@@ -478,8 +479,7 @@ export default function MangaChapters({
                     {/* User Rating Badge if already rated */}
                     {ratingScore !== undefined && (
                       <div className="flex items-center gap-1 bg-blue-950/80 border border-blue-500/60 text-blue-300 font-black text-xs px-2.5 py-1 rounded-lg">
-                        <span>★</span>
-                        <span>{ratingScore}%</span>
+                        <Score value={ratingScore} percentPrefix="★ " />
                       </div>
                     )}
 

@@ -76,7 +76,11 @@ public class RecommendationService {
         // 1. Collect media IDs to exclude (already rated or in watchlist)
         Set<String> excludedMediaIds = new HashSet<>();
         myRatings.forEach(r -> {
-            if (r.getMediaId() != null) excludedMediaIds.add(r.getMediaId());
+            if (r.getMediaId() == null) return;
+            excludedMediaIds.add(r.getMediaId());
+            // Rating a season means you've seen the show, so don't recommend the show itself.
+            var season = SEASON_ID.matcher(r.getMediaId());
+            if (season.matches()) excludedMediaIds.add(season.group(1));
         });
 
         List<UserWatchlistEntity> myWatchlist = userWatchlistRepository.findByUserId(currentUserId);
@@ -93,8 +97,14 @@ public class RecommendationService {
         List<TwinMediaRecommendation> twinRecommendations = new ArrayList<>();
 
         if (!myScoreMap.isEmpty()) {
-            List<String> myMediaIds = new ArrayList<>(myScoreMap.keySet());
-            List<UserRatingEntity> overlapping = userRatingRepository.findByMediaIdInAndUserIdNot(myMediaIds, currentUserId);
+            // Compare on "comparable" scores: direct ratings, plus a whole-show score averaged from season
+            // ratings when someone rated only seasons. Shows I rated (directly or via seasons) also pull in
+            // other users' season ratings of those shows.
+            Map<String, ComparableScore> myComparable = comparableScores(myRatings);
+            List<String> myMediaIds = new ArrayList<>(myComparable.keySet());
+            List<String> myShowIds = myComparable.keySet().stream().filter(k -> SHOW_ID.matcher(k).matches()).toList();
+            List<UserRatingEntity> overlapping = userRatingRepository.findOverlappingWithSeasons(
+                    myMediaIds, myShowIds.isEmpty() ? List.of("-") : myShowIds, currentUserId);
 
             Map<UUID, List<UserRatingEntity>> byOtherUser = overlapping.stream()
                     .collect(Collectors.groupingBy(UserRatingEntity::getUserId));
@@ -104,24 +114,27 @@ public class RecommendationService {
 
             for (Map.Entry<UUID, List<UserRatingEntity>> entry : byOtherUser.entrySet()) {
                 UUID otherUid = entry.getKey();
-                List<UserRatingEntity> shared = entry.getValue();
-                if (shared.isEmpty()) continue;
+                Map<String, ComparableScore> theirs = comparableScores(entry.getValue());
 
                 double totalProximity = 0;
-                for (UserRatingEntity r : shared) {
-                    Integer myScore = myScoreMap.get(r.getMediaId());
-                    if (myScore != null && r.getScore() != null) {
-                        int diff = Math.abs(myScore - r.getScore());
-                        totalProximity += (1.0 - (diff / 100.0));
-                    }
+                int sharedCount = 0;
+                for (Map.Entry<String, ComparableScore> mine : myComparable.entrySet()) {
+                    ComparableScore other = theirs.get(mine.getKey());
+                    // When both sides only have season-derived show scores, the seasons themselves are
+                    // compared directly, so skip the derived show score to avoid counting it twice.
+                    if (other == null || (mine.getValue().derived() && other.derived())) continue;
+                    double diff = Math.abs(mine.getValue().score() - other.score());
+                    totalProximity += (1.0 - (diff / 100.0));
+                    sharedCount++;
                 }
+                if (sharedCount == 0) continue;
 
-                double avgMatch = totalProximity / shared.size();
-                double confidenceFactor = Math.min(1.0, 0.70 + (shared.size() * 0.10));
+                double avgMatch = totalProximity / sharedCount;
+                double confidenceFactor = Math.min(1.0, 0.70 + (sharedCount * 0.10));
                 int matchPct = Math.min(99, Math.max(30, (int) Math.round(avgMatch * confidenceFactor * 100)));
 
                 if (matchPct >= 50) {
-                    candidates.add(new CandidateTwin(otherUid, matchPct, shared.size()));
+                    candidates.add(new CandidateTwin(otherUid, matchPct, sharedCount));
                 }
             }
 
@@ -229,6 +242,34 @@ public class RecommendationService {
         // 4. Genre-based: the genres that appear most in the user's well-rated TMDb titles
         dto.setGenreRecommendations(buildGenreRecommendations(myRatings, shown));
         return dto;
+    }
+
+    private static final java.util.regex.Pattern SHOW_ID = java.util.regex.Pattern.compile("^tmdb-tv-[0-9]+$");
+    private static final java.util.regex.Pattern SEASON_ID = java.util.regex.Pattern.compile("^(tmdb-tv-[0-9]+)-s[0-9]+$");
+
+    /** A score used for twin matching; {@code derived} when it is a show score averaged from season ratings. */
+    private record ComparableScore(double score, boolean derived) {}
+
+    /**
+     * Direct ratings by media id, plus, for every show rated only by season, the average of those
+     * season ratings under the show's id (tmdb-tv-<id>). A direct show rating always wins.
+     */
+    static Map<String, ComparableScore> comparableScores(List<UserRatingEntity> ratings) {
+        Map<String, ComparableScore> result = new HashMap<>();
+        Map<String, List<Integer>> seasonsByShow = new HashMap<>();
+        for (UserRatingEntity r : ratings) {
+            if (r.getMediaId() == null || r.getScore() == null) continue;
+            result.putIfAbsent(r.getMediaId(), new ComparableScore(r.getScore(), false));
+            var m = SEASON_ID.matcher(r.getMediaId());
+            if (m.matches()) seasonsByShow.computeIfAbsent(m.group(1), k -> new ArrayList<>()).add(r.getScore());
+        }
+        seasonsByShow.forEach((showId, scores) -> {
+            if (!result.containsKey(showId)) {
+                double avg = scores.stream().mapToInt(Integer::intValue).average().orElse(0);
+                result.put(showId, new ComparableScore(avg, true));
+            }
+        });
+        return result;
     }
 
     private record TmdbRef(String type, int id) {

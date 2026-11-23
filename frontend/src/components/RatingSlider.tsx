@@ -187,7 +187,6 @@ export default function RatingSlider({ mediaId, mediaType, mediaTitle, mediaImag
           ) : (
             <span className="text-sm font-bold text-gray-400">
               <span className="text-2xl font-black text-white">{scoreToStars(rating, stars)}</span>/{stars}
-              <span className={`ml-2 text-xs ${getScoreColor(snapScore(rating, ratingStyle))}`}>{snapScore(rating, ratingStyle)}%</span>
             </span>
           )}
         </div>

@@ -251,6 +251,54 @@ public class AnilistClient {
         return mangaDexClient.searchManga(query);
     }
 
+    /** Anime studios (e.g. "MAPPA"). Ids are company slugs: anilist-<id>. */
+    public List<MediaItemDto> searchStudios(String query) {
+        if (query == null || query.isBlank()) return List.of();
+        String normalizedQuery = query.trim().toLowerCase();
+        String cacheKey = "anilist-search-studio-" + normalizedQuery;
+
+        Optional<List> cached = cacheService.get(cacheKey, List.class);
+        if (cached.isPresent()) {
+            return objectMapper.convertValue(cached.get(), objectMapper.getTypeFactory().constructCollectionType(List.class, MediaItemDto.class));
+        }
+
+        String gql = """
+            query ($search: String) {
+              Page(page: 1, perPage: 6) {
+                studios(search: $search) { id name isAnimationStudio }
+              }
+            }
+        """;
+        Map<String, Object> body = Map.of("query", gql, "variables", Map.of("search", query.trim()));
+        try {
+            JsonNode response = restClient.post()
+                    .uri(GRAPHQL_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(JsonNode.class);
+            JsonNode studios = response == null ? null : response.path("data").path("Page").path("studios");
+            if (studios == null || !studios.isArray()) return List.of();
+
+            List<MediaItemDto> results = new ArrayList<>();
+            for (JsonNode item : studios) {
+                MediaItemDto dto = new MediaItemDto();
+                dto.setId("anilist-" + item.path("id").asInt());
+                dto.setTitle(item.path("name").asText("Unknown"));
+                dto.setType("company");
+                dto.setImage(null);
+                dto.setDescription(item.path("isAnimationStudio").asBoolean(false) ? "Animation studio" : "Studio");
+                dto.setOrigin("ANILIST");
+                results.add(dto);
+            }
+            cacheService.put(cacheKey, "anilist", results, 24 * 3600);
+            return results;
+        } catch (Exception e) {
+            log.warn("AniList studio search error for query '{}': {}", query, e.getMessage());
+            return List.of();
+        }
+    }
+
     public List<MediaItemDto> searchStaff(String query) {
         if (query == null || query.isBlank()) return List.of();
         String normalizedQuery = query.trim().toLowerCase();

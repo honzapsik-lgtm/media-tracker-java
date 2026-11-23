@@ -5,16 +5,8 @@ import { useRouter } from "next/navigation";
 import { Shield } from "lucide-react";
 import PrivacySettingsModal from "@/components/PrivacySettingsModal";
 
-// Shared dictionary so the header knows the names/icons of the badges
-export const BADGE_DICTIONARY = [
-  { id: 'ratings_10', title: 'Initiate', desc: 'Rate 10 total pieces of media.', icon: '10' },
-  { id: 'ratings_50', title: 'Critic', desc: 'Rate 50 total pieces of media.', icon: '50' },
-  { id: 'ratings_100', title: 'The Completionist', desc: 'Rate 100 total pieces of media.', icon: '100' },
-  { id: 'games_10', title: 'Controller Freak', desc: 'Rate 10 different games.', icon: 'G' },
-  { id: 'manga_10', title: 'Ink & Paper', desc: 'Rate 10 different manga volumes.', icon: 'M' },
-  { id: 'void_stare', title: 'The Void Stare', desc: 'Give a score of 20% or lower. You survived the trash.', icon: '20' },
-  { id: 'masterpiece', title: 'True Kino', desc: 'Award a flawless 100% Master Score.', icon: '100' },
-];
+import { BADGE_DICTIONARY, BadgeIcon } from "@/components/badges";
+export { BADGE_DICTIONARY };
 
 interface ProfileUser {
   id: string;
@@ -183,7 +175,7 @@ export default function ProfileHeader({ user, ratings, userBadges = [] }: { user
                       <option value="">None</option>
                       {userBadges.map(b => {
                         const dict = BADGE_DICTIONARY.find(d => d.id === b.badge_id);
-                        return dict ? <option key={b.badge_id} value={b.badge_id}>{dict.icon} {dict.title}</option> : null;
+                        return dict ? <option key={b.badge_id} value={b.badge_id}>{dict.title}</option> : null;
                       })}
                     </select>
                   ))}
@@ -238,8 +230,8 @@ export default function ProfileHeader({ user, ratings, userBadges = [] }: { user
                   
                   if (badge) {
                     return (
-                      <div key={i} className="w-10 h-10 bg-blue-900/30 border border-blue-500 rounded-lg flex items-center justify-center text-xl shadow-[0_0_10px_rgba(59,130,246,0.2)] cursor-help" title={badge.title}>
-                        {badge.icon}
+                      <div key={i} className="w-10 h-10 bg-blue-900/30 border border-blue-500 rounded-lg flex items-center justify-center text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.2)] cursor-help" title={`${badge.title}: ${badge.desc}`}>
+                        <BadgeIcon id={badge.id} className="w-5 h-5" />
                       </div>
                     );
                   }

@@ -39,12 +39,7 @@ export default function RatingStyleSetting() {
 
   return (
     <section className="p-6 bg-gray-900 border border-gray-800 rounded-xl">
-      <h2 className="text-lg font-black mb-1">Rating style</h2>
-      <p className="text-sm text-gray-500 mb-5">
-        How you give ratings. With stars you pick whole stars, saved as a percentage (3 of 5 stars is 60%,
-        7 of 10 is 70%). Your own ratings on your profile show as stars; community scores, covers and
-        statistics stay in percent.
-      </p>
+      <h2 className="text-lg font-black mb-5">Rating style</h2>
 
       <div role="radiogroup" aria-label="Rating style" className="grid gap-3 sm:grid-cols-3">
         {RATING_STYLES.map((style) => {
@@ -70,18 +65,14 @@ export default function RatingStyleSetting() {
                   aria-hidden="true"
                 />
               </div>
-              <p className="text-xs text-gray-500 mb-2">{RATING_STYLE_LABELS[style].description}</p>
               {style === "PERCENT" ? (
                 <span className="text-green-400 font-black text-lg">60%</span>
               ) : (
-                <span className="inline-flex items-center gap-2">
-                  <StarRow
-                    filled={style === "STARS_5" ? 3 : 6}
-                    total={style === "STARS_5" ? 5 : 10}
-                    sizeClass={style === "STARS_10" ? "w-3 h-3" : "w-4 h-4"}
-                  />
-                  <span className="text-xs font-bold text-gray-500">= 60%</span>
-                </span>
+                <StarRow
+                  filled={style === "STARS_5" ? 3 : 6}
+                  total={style === "STARS_5" ? 5 : 10}
+                  sizeClass={style === "STARS_10" ? "w-3 h-3" : "w-4 h-4"}
+                />
               )}
             </button>
           );

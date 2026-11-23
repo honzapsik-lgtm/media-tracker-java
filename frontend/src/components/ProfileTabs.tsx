@@ -6,9 +6,11 @@ import { useSearchParams } from "next/navigation";
 import CustomListsManager from "@/components/CustomListsManager";
 import MediaCardProfileHorizontal from "@/components/MediaCardProfileHorizontal";
 import FriendsManager from "@/components/FriendsManager";
-import { BADGE_DICTIONARY } from "@/components/ProfileHeader";
+import { BADGE_DICTIONARY, BadgeIcon } from "@/components/badges";
+import ProfileInsights, { type Insights } from "@/components/ProfileInsights";
 import { coverSrc } from "@/lib/images";
 
+import { Score, ScoreRangeLabel } from "@/components/Score";
 const getScoreColor = (score: number | null | undefined) => {
   if (score === null || score === undefined) return "bg-gray-900/80 text-gray-500 border-gray-700";
   if (score >= 95) return "bg-yellow-900/80 text-yellow-400 border-yellow-500 shadow-[0_0_8px_rgba(250,204,21,0.4)]"; 
@@ -44,12 +46,17 @@ export default function ProfileTabs({
   initialData, 
   initialCount,
   userBadges = [],
-  statsCache = []
+  statsCache = [],
+  badgeProgress = {},
+  insights = null
 }: { 
   initialData: ProfileItem[], 
   initialCount: number,
   userBadges?: UserBadge[],
-  statsCache?: any
+  statsCache?: any,
+  /** Per-badge progress computed by the backend (same rules it uses to award them). */
+  badgeProgress?: Record<string, { current: number; target: number }>,
+  insights?: Insights | null
 }) {
   // The active tab is mirrored in ?tab= so other places (e.g. the Toolkit drawer) can link straight to a tab.
   const searchParams = useSearchParams();
@@ -171,31 +178,18 @@ export default function ProfileTabs({
     distribution[4] += (dist["9"]||0) + (dist["10"]||0);
   });
 
-  const avgScore = totalRatingCount > 0 ? Math.round(sumAvg / totalRatingCount) : 0;
+  const avgExact = totalRatingCount > 0 ? sumAvg / totalRatingCount : 0;
+  const avgScore = Math.round(avgExact);
   const maxBucket = Math.max(...distribution, 1);
   const hasVoidStare = minScore <= 20 && totalRatingCount > 0;
   const hasMasterpiece = maxScore === 100;
 
   // ---- DYNAMIC BADGE PROGRESS LOGIC ----
   const getBadgeProgress = (badgeId: string) => {
-    let current = 0;
-    let target = 1;
-    
-    switch (badgeId) {
-      case 'ratings_10': target = 10; current = totalRatingCount; break;
-      case 'ratings_50': target = 50; current = totalRatingCount; break;
-      case 'ratings_100': target = 100; current = totalRatingCount; break;
-      case 'games_10': target = 10; current = gameCount; break;
-      case 'manga_10': target = 10; current = mangaCount; break;
-      case 'void_stare': target = 1; current = hasVoidStare ? 1 : 0; break;
-      case 'masterpiece': target = 1; current = hasMasterpiece ? 1 : 0; break;
-    }
-    
-    return {
-      current: Math.min(current, target),
-      target,
-      percentage: Math.min((current / target) * 100, 100)
-    };
+    const p = badgeProgress[badgeId];
+    const target = p?.target ?? 1;
+    const current = Math.min(p?.current ?? 0, target);
+    return { current, target, percentage: Math.min((current / target) * 100, 100) };
   };
 
   const renderTabNavigation = () => (
@@ -257,7 +251,7 @@ export default function ProfileTabs({
                 <div className="flex items-center gap-4 mb-2">
                   <Link href={getMediaUrl(item.mediaId)} className="font-bold text-xl hover:text-blue-400">{item.title}</Link>
                   <span className={`px-2 py-1 text-xs font-black rounded shadow-lg border backdrop-blur-md ${getScoreColor(item.score)}`}>
-                    {item.score}%
+                    <Score value={item.score} />
                   </span>
                 </div>
                 <p className="text-gray-300 whitespace-pre-wrap">{item.reviewText}</p>
@@ -271,12 +265,14 @@ export default function ProfileTabs({
       {activeTab === 'top100' && <CustomListsManager />}
 
       {activeTab === 'stats' && (
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="space-y-6">
+        <ProfileInsights insights={insights} />
+        <div className="grid md:grid-cols-2 gap-6">
           <div className="bg-gray-900 p-8 rounded-2xl border border-gray-800 shadow-xl">
             <h3 className="text-2xl font-black mb-2">The Critic&apos;s Offset</h3>
             <p className="text-gray-400 text-sm mb-8">How harsh or generous are your ratings?</p>
             <div className="flex items-end gap-6 mb-6">
-              <div className="text-6xl font-black text-blue-500">{avgScore}%</div>
+              <div className="text-6xl font-black text-blue-500"><Score value={avgExact} kind="average" /></div>
               <div className="pb-2 text-gray-400 font-bold uppercase tracking-widest text-sm">Average Score</div>
             </div>
             {avgScore > 80 ? <p className="text-green-400 text-sm font-bold border-l-4 border-green-500 pl-3">You are a highly generous critic. You focus on the best parts of media.</p> : 
@@ -287,15 +283,16 @@ export default function ProfileTabs({
           <div className="bg-gray-900 p-8 rounded-2xl border border-gray-800 shadow-xl">
             <h3 className="text-2xl font-black mb-8">Score Distribution</h3>
             <div className="flex items-end justify-between h-48 gap-2">
-              {['0-20', '21-40', '41-60', '61-80', '81-100'].map((label, index) => (
-                <div key={label} className="flex flex-col items-center flex-1 gap-2 group">
+              {[[0, 20], [21, 40], [41, 60], [61, 80], [81, 100]].map(([from, to], index) => (
+                <div key={from} className="flex flex-col items-center flex-1 gap-2 group">
                   <div className="text-xs font-bold text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">{distribution[index]}</div>
                   <div className="w-full bg-blue-600 rounded-t-md transition-all duration-500 hover:bg-blue-400" style={{ height: `${Math.max((distribution[index] / maxBucket) * 100, 5)}%` }}></div>
-                  <div className="text-[10px] text-gray-500 font-bold whitespace-nowrap">{label}</div>
+                  <div className="text-[10px] text-gray-500 font-bold whitespace-nowrap"><ScoreRangeLabel from={from} to={to} /></div>
                 </div>
               ))}
             </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -309,8 +306,8 @@ export default function ProfileTabs({
             return (
               <div key={badge.id} className={`p-4 rounded-xl border flex items-center gap-5 transition-all duration-300 ${isUnlocked ? 'bg-gray-900 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.05)]' : 'bg-gray-950/50 border-gray-800/80 grayscale'}`}>
                 
-                <div className={`w-14 h-14 shrink-0 flex items-center justify-center text-2xl rounded-lg border-2 ${isUnlocked ? 'bg-blue-900/30 border-blue-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-600'}`}>
-                  {badge.icon}
+                <div className={`w-14 h-14 shrink-0 flex items-center justify-center rounded-lg border-2 ${isUnlocked ? 'bg-blue-900/30 border-blue-500 text-blue-200' : 'bg-gray-900 border-gray-700 text-gray-600'}`}>
+                  <BadgeIcon id={badge.id} className="w-7 h-7" />
                 </div>
                 
                 <div className="flex-1 min-w-0">

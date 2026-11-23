@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MediaItem } from "@/types";
 import MediaCardHorizontal from "./MediaCardHorizontal";
 import FriendActionButton from "./FriendActionButton";
-import { Users, Film, Tv, Gamepad2, BookOpen, Layers, MapPin, Star, User } from "lucide-react";
+import { Users, Film, Tv, Gamepad2, BookOpen, Layers, MapPin, Star, User, Building2 } from "lucide-react";
 
 interface SearchUser {
   id: string;
@@ -24,7 +24,7 @@ interface SearchResultsTabsProps {
   userResults?: SearchUser[];
 }
 
-type Tab = "all" | "movies" | "shows" | "games" | "manga" | "people" | "users";
+type Tab = "all" | "movies" | "shows" | "games" | "manga" | "people" | "companies" | "users";
 
 export default function SearchResultsTabs({
   results,
@@ -39,10 +39,11 @@ export default function SearchResultsTabs({
   }, []);
 
   const peopleResults = results.filter((r) => r.type === "person");
+  const companyResults = results.filter((r) => r.type === "company");
 
   // Media tabs strictly display only media
   const filteredResults = results.filter((item) => {
-    if (activeTab === "all") return item.type !== "person";
+    if (activeTab === "all") return item.type !== "person" && item.type !== "company";
     if (activeTab === "movies") return item.type === "movie";
     if (activeTab === "shows") return item.type === "show";
     if (activeTab === "games") return item.type === "game";
@@ -56,7 +57,7 @@ export default function SearchResultsTabs({
       id: "all",
       label: "All",
       icon: Layers,
-      count: results.length,
+      count: results.length - companyResults.length,
     },
     {
       id: "movies",
@@ -87,6 +88,12 @@ export default function SearchResultsTabs({
       label: "People",
       icon: User,
       count: peopleResults.length,
+    },
+    {
+      id: "companies",
+      label: "Companies",
+      icon: Building2,
+      count: companyResults.length,
     },
     {
       id: "users",
@@ -210,6 +217,14 @@ export default function SearchResultsTabs({
             })}
           </div>
         )
+      ) : activeTab === "companies" ? (
+        companyResults.length === 0 ? (
+          <p className="text-gray-400 text-center py-12">No companies or studios found matching your search.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {companyResults.map((company) => <CompanyCard key={company.id} company={company} />)}
+          </div>
+        )
       ) : activeTab === "people" ? (
         /* People Tab Content */
         peopleResults.length === 0 ? (
@@ -259,6 +274,28 @@ export default function SearchResultsTabs({
       ) : (
         /* Media / All Results */
         <div>
+          {/* Companies and studios matching the search (e.g. "MAPPA") */}
+          {activeTab === "all" && companyResults.length > 0 && (
+            <div className="mb-8 bg-gray-900/40 p-5 rounded-2xl border border-gray-800/60">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
+                  <Building2 className="w-3.5 h-3.5" /> Companies &amp; Studios
+                </h3>
+                {companyResults.length > 3 && (
+                  <button
+                    onClick={() => setActiveTab("companies")}
+                    className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    View all ({companyResults.length}) →
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {companyResults.slice(0, 3).map((company) => <CompanyCard key={`spotlight-${company.id}`} company={company} />)}
+              </div>
+            </div>
+          )}
+
           {/* Spotlight on People in All tab if matching people exist */}
           {activeTab === "all" && peopleResults.length > 0 && (
             <div className="mb-8 bg-gray-900/40 p-5 rounded-2xl border border-gray-800/60">
@@ -323,5 +360,27 @@ export default function SearchResultsTabs({
         </div>
       )}
     </div>
+  );
+}
+
+/** A company or studio result; links to its company page. */
+function CompanyCard({ company }: { company: MediaItem }) {
+  return (
+    <Link
+      href={`/company/${company.id}`}
+      className="bg-gray-900 border border-gray-800 rounded-xl p-3.5 flex items-center gap-3.5 hover:border-emerald-500/50 hover:bg-gray-800/80 transition-all group"
+    >
+      <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100/95 border border-gray-700 shrink-0 flex items-center justify-center p-1.5">
+        {company.image ? (
+          <img src={company.image} alt={company.title} className="max-w-full max-h-full object-contain" />
+        ) : (
+          <Building2 className="w-5 h-5 text-gray-500" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <h4 className="font-bold text-sm text-gray-200 group-hover:text-emerald-400 truncate transition-colors">{company.title}</h4>
+        <p className="text-[11px] text-gray-400 truncate mt-0.5">{company.description || "Company"}</p>
+      </div>
+    </Link>
   );
 }

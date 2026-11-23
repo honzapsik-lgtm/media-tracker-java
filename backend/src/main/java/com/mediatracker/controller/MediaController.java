@@ -18,10 +18,13 @@ public class MediaController {
     private final MediaService mediaService;
     private final com.mediatracker.repository.MediaStatsRepository mediaStatsRepository;
     private final com.mediatracker.repository.GlobalRankingRepository globalRankingRepository;
+    private final com.mediatracker.repository.UserRatingRepository userRatingRepository;
 
     public MediaController(MediaService mediaService,
                            com.mediatracker.repository.MediaStatsRepository mediaStatsRepository,
-                           com.mediatracker.repository.GlobalRankingRepository globalRankingRepository) {
+                           com.mediatracker.repository.GlobalRankingRepository globalRankingRepository,
+                           com.mediatracker.repository.UserRatingRepository userRatingRepository) {
+        this.userRatingRepository = userRatingRepository;
         this.mediaService = mediaService;
         this.mediaStatsRepository = mediaStatsRepository;
         this.globalRankingRepository = globalRankingRepository;
@@ -42,7 +45,7 @@ public class MediaController {
 
     private ResponseEntity<?> resolveBatchStats(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
-            return ResponseEntity.ok(java.util.Map.of("stats", java.util.Map.of(), "ranks", java.util.Map.of()));
+            return ResponseEntity.ok(java.util.Map.of("stats", java.util.Map.of(), "ranks", java.util.Map.of(), "mine", java.util.Map.of()));
         }
 
         java.util.Map<String, Integer> statsMap = mediaStatsRepository.findAllById(ids)
@@ -63,7 +66,17 @@ public class MediaController {
                         (a, b) -> a
                 ));
 
-        return ResponseEntity.ok(java.util.Map.of("stats", statsMap, "ranks", rankMap));
+        // The signed-in user's own scores for these titles (empty for guests)
+        java.util.Map<String, Integer> mine = com.mediatracker.security.SecurityUtils.getCurrentUserId()
+                .map(uid -> userRatingRepository.findByUserIdAndMediaIdIn(uid, ids).stream()
+                        .filter(r -> r.getScore() != null)
+                        .collect(java.util.stream.Collectors.toMap(
+                                com.mediatracker.model.entity.UserRatingEntity::getMediaId,
+                                com.mediatracker.model.entity.UserRatingEntity::getScore,
+                                (a, b) -> a)))
+                .orElse(java.util.Map.of());
+
+        return ResponseEntity.ok(java.util.Map.of("stats", statsMap, "ranks", rankMap, "mine", mine));
     }
 
     @GetMapping("/{slug}")

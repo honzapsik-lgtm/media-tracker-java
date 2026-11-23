@@ -3,6 +3,7 @@ import { MediaItem } from "@/types";
 import MediaActionMenu from "./MediaActionMenu";
 import { coverSrc } from "@/lib/images";
 
+import { Score } from "@/components/Score";
 const getScoreColor = (score: number | null | undefined) => {
   if (score === null || score === undefined) return "text-gray-500";
   if (score >= 95) return "text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]"; 
@@ -72,7 +73,7 @@ export default function MediaCardHorizontal({ item, rankPosition, showTotalRatin
         <div className="text-right">
           <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest mb-1">Score</p>
           <p className={`font-black text-base ${getScoreColor(item.communityScore)}`}>
-            {item.communityScore ? `${item.communityScore}%` : 'N/A'}
+            <Score value={item.communityScore || null} kind="average" fallback="N/A" />
           </p>
         </div>
         <div className="shrink-0 pl-2 border-l border-gray-800 ml-2">

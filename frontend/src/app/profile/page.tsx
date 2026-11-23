@@ -85,6 +85,8 @@ export default async function ProfilePage() {
           initialCount={totalCount}
           userBadges={badges}
           statsCache={statsCache}
+          badgeProgress={profile.badgeProgress || {}}
+          insights={profile.insights ?? null}
         />
       </div>
     </main>

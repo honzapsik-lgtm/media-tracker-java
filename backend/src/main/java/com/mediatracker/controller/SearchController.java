@@ -38,6 +38,10 @@ public class SearchController {
 
         String query = q.trim();
 
+        if ("company".equalsIgnoreCase(type) || "companies".equalsIgnoreCase(type)) {
+            return ResponseEntity.ok(searchCompanies(query));
+        }
+
         if ("person".equalsIgnoreCase(type) || "people".equalsIgnoreCase(type)) {
             List<MediaItemDto> people = new ArrayList<>(tmdbClient.searchPersons(query));
             people.addAll(anilistClient.searchStaff(query));
@@ -49,11 +53,18 @@ public class SearchController {
         List<MediaItemDto> games = igdbClient.searchGames(query);
         List<MediaItemDto> manga = anilistClient.searchManga(query);
         List<MediaItemDto> anilistStaff = anilistClient.searchStaff(query);
+        List<MediaItemDto> companies = searchCompanies(query);
 
         List<MediaItemDto> allPeople = new ArrayList<>(tmdbPeople);
         allPeople.addAll(anilistStaff);
 
         List<MediaItemDto> combined = new ArrayList<>();
+
+        // A company whose name matches the query (e.g. "mappa", "a24") goes first; others go last.
+        String lowerQuery = query.toLowerCase();
+        List<MediaItemDto> closeCompanies = companies.stream()
+                .filter(c -> c.getTitle() != null && c.getTitle().toLowerCase().startsWith(lowerQuery)).limit(2).toList();
+        combined.addAll(closeCompanies);
 
         // Add top matching people right at the front so actor/person searches are immediately visible
         int topPeopleCount = Math.min(3, allPeople.size());
@@ -74,8 +85,24 @@ public class SearchController {
             combined.add(allPeople.get(i));
         }
 
-        int limit = Math.min(36, combined.size());
+        companies.stream().filter(c -> !closeCompanies.contains(c)).limit(3).forEach(combined::add);
+
+        int limit = Math.min(40, combined.size());
         return ResponseEntity.ok(combined.subList(0, limit));
+    }
+
+    /** TMDB companies plus AniList studios, without duplicate names (TMDB wins: it has logos). */
+    private List<MediaItemDto> searchCompanies(String query) {
+        List<MediaItemDto> result = new ArrayList<>(tmdbClient.searchCompanies(query));
+        java.util.Set<String> names = new java.util.HashSet<>();
+        result.forEach(c -> names.add(c.getTitle() == null ? "" : c.getTitle().trim().toLowerCase()));
+        for (MediaItemDto studio : anilistClient.searchStudios(query)) {
+            if (names.add(studio.getTitle() == null ? "" : studio.getTitle().trim().toLowerCase())) result.add(studio);
+        }
+        // Exact name matches first
+        String q = query.trim().toLowerCase();
+        result.sort(java.util.Comparator.comparing(c -> c.getTitle() == null || !c.getTitle().trim().equalsIgnoreCase(q)));
+        return result;
     }
 
     @GetMapping("/people")

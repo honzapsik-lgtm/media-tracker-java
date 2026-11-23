@@ -7,6 +7,8 @@ export interface MediaItem {
   description?: string | null;
   communityScore?: number | null;
   listRank?: number | null;
+  /** The signed-in user's own score, when the page knows it. */
+  myScore?: number | null;
   totalRatings?: number | null;
   originalLanguage?: string;
   genreIds?: number[];

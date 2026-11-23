@@ -2,43 +2,44 @@
 
 import { useState } from "react";
 import { useRatingStyle } from "@/components/RatingStyleProvider";
-import { scoreToStars, starCount, starsToScore } from "@/lib/rating-style";
+import { formatAverage, formatRating, scoreToStars, starCount, starsToScore } from "@/lib/rating-style";
 
 /**
- * The signed-in user's own rating, in their chosen style: "73%" for percent,
- * or whole stars (e.g. ★★★★☆) for star styles. Only use for the user's own ratings.
+ * A score in the viewer's rating style. `kind="rating"` (one person's rating) shows whole
+ * stars, e.g. "4/5 ★"; `kind="average"` (community score, statistics) keeps one decimal,
+ * e.g. "4.3/5 ★". In percent style both show "%". Works inside server components too.
  */
-export function OwnScore({
+export function Score({
   value,
+  kind = "rating",
   fallback = "-",
-  compact = false,
+  percentPrefix = "",
   className,
 }: {
   value: number | null | undefined;
+  kind?: "rating" | "average";
   fallback?: string;
-  /** Text form ("4/5 ★") for tight spaces instead of star icons. */
-  compact?: boolean;
+  /** Shown before the value in percent style only (star styles already end in ★). */
+  percentPrefix?: string;
   className?: string;
 }) {
   const { ratingStyle } = useRatingStyle();
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return <span className={className}>{fallback}</span>;
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return <span className={className}>{starCount(ratingStyle) === null ? percentPrefix : ""}{fallback}</span>;
   }
+  const n = Number(value);
+  const text = kind === "average" ? formatAverage(n, ratingStyle) : formatRating(n, ratingStyle);
+  const prefix = starCount(ratingStyle) === null ? percentPrefix : "";
+  return <span className={className}>{prefix}{text}</span>;
+}
 
+/** Percent ranges shown in the viewer's style ("0-20" → "0-2★" with 10 stars). */
+export function ScoreRangeLabel({ from, to }: { from: number; to: number }) {
+  const { ratingStyle } = useRatingStyle();
   const stars = starCount(ratingStyle);
-  if (stars === null) return <span className={className}>{value}%</span>;
-
-  const filled = scoreToStars(value, stars);
-  const label = `${filled} of ${stars} stars`;
-  if (compact) {
-    return <span className={className} title={label}>{filled}/{stars} ★</span>;
-  }
-  return (
-    <span className={`inline-flex flex-col items-end gap-0.5 ${className ?? ""}`} title={label}>
-      <StarRow filled={filled} total={stars} sizeClass={stars === 10 ? "w-2.5 h-2.5" : "w-3.5 h-3.5"} />
-      <span className="text-[10px] text-gray-500 font-bold">{filled}/{stars}</span>
-    </span>
-  );
+  if (stars === null) return <>{from}-{to}</>;
+  const f = (v: number) => Number(((v / 100) * stars).toFixed(1));
+  return <>{f(from)}-{f(to)}★</>;
 }
 
 /** A row of whole stars: the first `filled` lit, the rest dim. */
@@ -72,6 +73,8 @@ export function StarPicker({
   const [hover, setHover] = useState<number | null>(null);
   const selected = scoreToStars(value, stars);
   const shown = hover ?? selected;
+  // Lit stars take the colour of the score they stand for, following the hover.
+  const litColor = starTierColor(starsToScore(shown, stars));
 
   return (
     <div role="radiogroup" aria-label={label} className={`flex flex-wrap items-center ${stars === 10 ? "gap-0" : "gap-1"}`} onMouseLeave={() => setHover(null)}>
@@ -103,12 +106,21 @@ export function StarPicker({
             onBlur={() => setHover(null)}
             className="p-0.5 rounded transition-transform hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
           >
-            <StarIcon className={`${sizeClass} transition-colors ${n <= shown ? "text-yellow-400" : "text-gray-700"}`} />
+            <StarIcon className={`${sizeClass} transition-colors ${n <= shown ? litColor : "text-gray-800"}`} />
           </button>
         );
       })}
     </div>
   );
+}
+
+/** Same tiers as the percentage colours: gold 95+, green 75+, blue 50+, grey below. */
+export function starTierColor(score: number): string {
+  if (score >= 95) return "text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.6)]";
+  if (score >= 75) return "text-green-400";
+  if (score >= 50) return "text-blue-400";
+  if (score >= 25) return "text-gray-400";
+  return "text-gray-600";
 }
 
 function StarIcon({ className }: { className?: string }) {

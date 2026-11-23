@@ -23,6 +23,20 @@ public interface UserRatingRepository extends JpaRepository<UserRatingEntity, UU
     List<UserRatingEntity> findByUserIdAndMediaIdStartingWith(UUID userId, String prefix);
     List<UserRatingEntity> findByUserIdAndMediaIdIn(UUID userId, List<String> mediaIds);
     List<UserRatingEntity> findByMediaIdInAndUserIdNot(List<String> mediaIds, UUID userId);
+
+    /**
+     * Other users' ratings that overlap with a set of titles: exact media ids, plus season ratings
+     * (tmdb-tv-<id>-s<n>) of the given shows, so season ratings can stand in for a whole-show rating.
+     */
+    @Query(value = """
+        SELECT * FROM user_ratings r
+        WHERE r.user_id <> :userId
+          AND (r.media_id IN (:mediaIds)
+               OR substring(r.media_id from '^(tmdb-tv-[0-9]+)-s[0-9]+$') IN (:showIds))
+    """, nativeQuery = true)
+    List<UserRatingEntity> findOverlappingWithSeasons(@Param("mediaIds") List<String> mediaIds,
+                                                      @Param("showIds") List<String> showIds,
+                                                      @Param("userId") UUID userId);
     List<UserRatingEntity> findByUserIdAndScoreGreaterThanEqual(UUID userId, int score);
     List<UserRatingEntity> findByMediaIdAndReviewTextIsNotNullOrderByCreatedAtDesc(String mediaId);
 

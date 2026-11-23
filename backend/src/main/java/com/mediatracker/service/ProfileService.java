@@ -20,15 +20,83 @@ public class ProfileService {
     private final UserBadgeRepository userBadgeRepository;
     private final UserStatsCacheRepository userStatsCacheRepository;
     private final UserPrivacySettingsRepository userPrivacySettingsRepository;
+    private final FriendshipRepository friendshipRepository;
+    private final UserActivityRepository userActivityRepository;
+    private final StatsService statsService;
 
     public ProfileService(UserRepository userRepository,
                           UserBadgeRepository userBadgeRepository,
                           UserStatsCacheRepository userStatsCacheRepository,
-                          UserPrivacySettingsRepository userPrivacySettingsRepository) {
+                          UserPrivacySettingsRepository userPrivacySettingsRepository,
+                          FriendshipRepository friendshipRepository,
+                          UserActivityRepository userActivityRepository,
+                          StatsService statsService) {
+        this.statsService = statsService;
         this.userRepository = userRepository;
         this.userBadgeRepository = userBadgeRepository;
         this.userStatsCacheRepository = userStatsCacheRepository;
         this.userPrivacySettingsRepository = userPrivacySettingsRepository;
+        this.friendshipRepository = friendshipRepository;
+        this.userActivityRepository = userActivityRepository;
+    }
+
+    /** SELF, FRIENDS, PENDING_SENT, PENDING_RECEIVED or NONE, seen from the viewer. */
+    private String relation(UUID viewerId, UUID userId) {
+        if (viewerId == null) return "NONE";
+        if (viewerId.equals(userId)) return "SELF";
+        return friendshipRepository.findBetweenUsers(viewerId, userId).map(f -> switch (f.getStatus()) {
+            case ACCEPTED -> "FRIENDS";
+            case PENDING -> f.getSenderId().equals(viewerId) ? "PENDING_SENT" : "PENDING_RECEIVED";
+            default -> "NONE";
+        }).orElse("NONE");
+    }
+
+    private static boolean canView(VisibilityLevel level, String relation) {
+        if ("SELF".equals(relation)) return true;
+        if (level == null || level == VisibilityLevel.PUBLIC) return true;
+        return level == VisibilityLevel.FRIENDS_ONLY && "FRIENDS".equals(relation);
+    }
+
+    private UserPrivacySettingsEntity privacyOf(UUID userId) {
+        return userPrivacySettingsRepository.findByUserId(userId).orElseGet(() -> {
+            UserPrivacySettingsEntity ps = new UserPrivacySettingsEntity();
+            ps.setUserId(userId);
+            return ps;
+        });
+    }
+
+    /** A user's own activity for their profile page, if their activity privacy lets the viewer see it. */
+    @Transactional(readOnly = true)
+    public Optional<Map<String, Object>> getProfileActivity(String username, UUID viewerUserId, int limit) {
+        Optional<UserEntity> userOpt = userRepository.findByUsernameIgnoreCase(username);
+        if (userOpt.isEmpty()) return Optional.empty();
+        UserEntity user = userOpt.get();
+
+        String rel = relation(viewerUserId, user.getId());
+        boolean allowed = canView(privacyOf(user.getId()).getActivityVisibility(), rel);
+
+        List<Map<String, Object>> activities = new ArrayList<>();
+        if (allowed) {
+            var page = userActivityRepository.findByUserId(user.getId(),
+                    org.springframework.data.domain.PageRequest.of(0, Math.max(1, Math.min(limit, 200)),
+                            org.springframework.data.domain.Sort.by("createdAt").descending()));
+            for (UserActivityEntity act : page.getContent()) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("id", act.getId());
+                map.put("type", act.getType());
+                map.put("media_id", act.getMediaId());
+                map.put("media_title", act.getMediaTitle());
+                map.put("media_image", act.getMediaImage());
+                map.put("media_type", act.getMediaType());
+                map.put("data", act.getData());
+                map.put("created_at", act.getCreatedAt());
+                activities.add(map);
+            }
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("canView", allowed);
+        result.put("activities", activities);
+        return Optional.of(result);
     }
 
     @Transactional(readOnly = true)
@@ -39,13 +107,10 @@ public class ProfileService {
         UserEntity user = userOpt.get();
         UUID userId = user.getId();
 
-        UserPrivacySettingsEntity privacy = userPrivacySettingsRepository.findByUserId(userId).orElseGet(() -> {
-            UserPrivacySettingsEntity ps = new UserPrivacySettingsEntity();
-            ps.setUserId(userId);
-            return ps;
-        });
+        UserPrivacySettingsEntity privacy = privacyOf(userId);
 
         boolean isOwner = viewerUserId != null && viewerUserId.equals(userId);
+        String rel = relation(viewerUserId, userId);
 
         List<UserBadgeEntity> badges = userBadgeRepository.findByUserId(userId);
         List<String> badgeIds = badges.stream().map(UserBadgeEntity::getBadgeId).toList();
@@ -71,6 +136,12 @@ public class ProfileService {
         profile.put("stats", statsMap);
         profile.put("privacy", privacy);
         profile.put("isOwner", isOwner);
+        if (isOwner) profile.put("badgeProgress", statsService.badgeProgress(userId));
+        if (canView(privacy.getRatingsVisibility(), rel)) profile.put("insights", statsService.profileInsights(userId));
+        profile.put("relation", rel);
+        profile.put("canViewProfile", canView(privacy.getProfileVisibility(), rel));
+        profile.put("canViewRatings", canView(privacy.getRatingsVisibility(), rel));
+        profile.put("canViewActivity", canView(privacy.getActivityVisibility(), rel));
 
         return Optional.of(profile);
     }

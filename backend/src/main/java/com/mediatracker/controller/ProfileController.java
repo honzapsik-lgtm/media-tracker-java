@@ -40,6 +40,16 @@ public class ProfileController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/{username}/activity")
+    @Operation(summary = "Get a user's own activity, respecting their activity privacy setting")
+    public ResponseEntity<?> getProfileActivity(@PathVariable String username,
+                                                @RequestParam(defaultValue = "60") int limit) {
+        UUID viewerId = SecurityUtils.getCurrentUserId().orElse(null);
+        return profileService.getProfileActivity(username, viewerId, limit)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/username/available")
     @Operation(summary = "Check nickname availability")
     public ResponseEntity<?> checkUsername(@RequestParam String username) {
